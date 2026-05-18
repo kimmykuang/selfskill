@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ss - Skills & Prompts Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="app()" x-init="init()">
+    <!-- Navigation -->
+    <nav class="bg-white border-b border-gray-200 px-6 py-3">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <h1 class="text-xl font-bold text-gray-800">ss</h1>
+            <div class="flex gap-4">
+                <a href="#/prompts" class="nav-link" :class="{ 'active': route.startsWith('prompts') }">Prompts</a>
+                <a href="#/skills" class="nav-link" :class="{ 'active': route === 'skills' }">Skills</a>
+                <a href="#/plugins" class="nav-link" :class="{ 'active': route.startsWith('plugins') }">Plugins</a>
+                <a href="#/status" class="nav-link" :class="{ 'active': route === 'status' }">Status</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-6xl mx-auto px-6 py-8">
+        <!-- Prompts List -->
+        <div x-show="route === 'prompts'" x-cloak>
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-semibold text-gray-800">Prompts</h2>
+                <a href="#/prompts/new" class="btn-primary">New Prompt</a>
+            </div>
+            <div class="flex gap-4 mb-4">
+                <input type="text" x-model="searchQuery" @input.debounce.300ms="fetchPrompts()"
+                    placeholder="Search prompts..." class="input flex-1">
+                <input type="text" x-model="searchTags" @input.debounce.300ms="fetchPrompts()"
+                    placeholder="Filter by tags (comma-separated)" class="input flex-1">
+            </div>
+            <div class="space-y-3">
+                <template x-for="p in prompts" :key="p.ID">
+                    <a :href="'#/prompts/' + p.ID" class="block bg-white rounded-lg border border-gray-200 p-4 hover:border-blue-300 transition-colors">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h3 class="font-medium text-gray-900" x-text="p.ID"></h3>
+                                <p class="text-sm text-gray-500 mt-1" x-text="p.Description"></p>
+                            </div>
+                            <div class="flex gap-1 flex-wrap">
+                                <template x-for="tag in (p.Tags || [])" :key="tag">
+                                    <span class="tag" x-text="tag"></span>
+                                </template>
+                            </div>
+                        </div>
+                    </a>
+                </template>
+                <p x-show="prompts.length === 0" class="text-gray-500 text-center py-8">No prompts found.</p>
+            </div>
+        </div>
+        <!-- Prompt Edit/Create -->
+        <div x-show="route === 'prompts/new' || route === 'prompts/edit'" x-cloak>
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-semibold text-gray-800" x-text="editPrompt.isNew ? 'New Prompt' : 'Edit Prompt'"></h2>
+                <a href="#/prompts" class="text-gray-500 hover:text-gray-700">Back to list</a>
+            </div>
+            <form @submit.prevent="savePrompt()" class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+                <div>
+                    <label class="label">ID</label>
+                    <input type="text" x-model="editPrompt.ID" class="input w-full" :disabled="!editPrompt.isNew" required>
+                </div>
+                <div>
+                    <label class="label">Description</label>
+                    <input type="text" x-model="editPrompt.Description" class="input w-full">
+                </div>
+                <div>
+                    <label class="label">Tags (comma-separated)</label>
+                    <input type="text" x-model="editPrompt.tagsStr" class="input w-full">
+                </div>
+                <div>
+                    <label class="label">Body</label>
+                    <textarea x-model="editPrompt.Body" class="input w-full h-64 font-mono text-sm" required></textarea>
+                </div>
+                <div class="flex gap-3">
+                    <button type="submit" class="btn-primary">Save</button>
+                    <button type="button" @click="deletePrompt()" x-show="!editPrompt.isNew" class="btn-danger">Delete</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Skills List -->
+        <div x-show="route === 'skills'" x-cloak>
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Skills</h2>
+            <div class="space-y-3">
+                <template x-for="sk in skills" :key="sk.Name">
+                    <div class="bg-white rounded-lg border border-gray-200 p-4">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h3 class="font-medium text-gray-900" x-text="sk.Name"></h3>
+                                <p class="text-sm text-gray-500 mt-1" x-text="sk.Description"></p>
+                            </div>
+                            <div class="flex gap-2 text-xs text-gray-400">
+                                <span x-show="sk.Version" x-text="'v' + sk.Version"></span>
+                                <span x-show="sk.HasAssets" class="tag">assets</span>
+                                <span x-show="sk.HasRef" class="tag">ref</span>
+                                <span x-show="sk.HasTests" class="tag">tests</span>
+                                <span x-show="sk.HasScripts" class="tag">scripts</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2" x-text="sk.DirPath"></p>
+                    </div>
+                </template>
+                <p x-show="skills.length === 0" class="text-gray-500 text-center py-8">No skills installed.</p>
+            </div>
+        </div>
+
+        <!-- Plugins List -->
+        <div x-show="route === 'plugins'" x-cloak>
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Plugins</h2>
+            <div class="space-y-3">
+                <template x-for="p in plugins" :key="p.name + '@' + p.marketplace">
+                    <div class="bg-white rounded-lg border border-gray-200 p-4">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h3 class="font-medium text-gray-900" x-text="p.name"></h3>
+                                <p class="text-sm text-gray-500 mt-1" x-text="p.marketplace"></p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-gray-400" x-text="p.version"></span>
+                                <span class="px-2 py-0.5 rounded text-xs font-medium"
+                                    :class="p.state === 'loaded' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
+                                    x-text="p.state"></span>
+                                <button x-show="p.state !== 'loaded'" @click="loadPlugin(p.name)"
+                                    class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100">Load</button>
+                                <button x-show="p.state === 'loaded'" @click="unloadPlugin(p.name)"
+                                    class="text-xs px-2 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100">Unload</button>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2" x-text="p.installPath"></p>
+                        <!-- Plugin skills -->
+                        <div x-show="p.skills && p.skills.length > 0" class="mt-2 flex gap-1 flex-wrap">
+                            <template x-for="sk in (p.skills || [])" :key="sk">
+                                <span class="tag" x-text="sk"></span>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <p x-show="plugins.length === 0" class="text-gray-500 text-center py-8">No plugins installed. Use 'ss plugin add-marketplace' and 'ss plugin install' to add plugins.</p>
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div x-show="route === 'status'" x-cloak>
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Link Status</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">User Scope</h3>
+                    <div class="space-y-2">
+                        <template x-for="link in status.userLinks" :key="link.linkPath">
+                            <div class="bg-white rounded border border-gray-200 p-3">
+                                <p class="font-medium text-sm" x-text="link.skillName"></p>
+                                <p class="text-xs text-gray-400 truncate" x-text="link.linkPath"></p>
+                            </div>
+                        </template>
+                        <p x-show="status.userLinks.length === 0" class="text-gray-500 text-sm">No user-scope links.</p>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">Project Scope</h3>
+                    <div class="space-y-2">
+                        <template x-for="link in status.projectLinks" :key="link.linkPath">
+                            <div class="bg-white rounded border border-gray-200 p-3">
+                                <p class="font-medium text-sm" x-text="link.skillName"></p>
+                                <p class="text-xs text-gray-400 truncate" x-text="link.linkPath"></p>
+                            </div>
+                        </template>
+                        <p x-show="status.projectLinks.length === 0" class="text-gray-500 text-sm">No project-scope links.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script src="/app.js"></script>
+</body>
+</html>
