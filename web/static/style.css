@@ -1,76 +1,261 @@
 [x-cloak] { display: none !important; }
 
 .rail-link {
-    @apply block px-2 py-1 rounded hover:bg-white text-gh-text;
+    display: block;
+    padding-inline: 0.5rem;
+    padding-block: 0.25rem;
+    border-radius: 0.25rem;
+    color: #1f2328;
+}
+.rail-link:hover {
+    background-color: #ffffff;
 }
 .rail-link-active {
-    @apply bg-white text-gh-link font-medium;
+    background-color: #ffffff;
+    color: #0969da;
+    font-weight: 500;
 }
 
 .gh-table {
-    @apply w-full text-sm border-collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    border-collapse: collapse;
 }
 .gh-table thead th {
-    @apply text-left text-[11px] uppercase text-gh-subtle font-semibold px-3 py-2 bg-gh-muted border-b border-gh-border;
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #656d76;
+    font-weight: 600;
+    padding-inline: 0.75rem;
+    padding-block: 0.5rem;
+    background-color: #f6f8fa;
+    border-bottom-width: 1px;
+    border-bottom-style: solid;
+    border-color: #d0d7de;
 }
 .gh-table tbody td {
-    @apply px-3 py-2 border-b border-gh-border;
+    padding-inline: 0.75rem;
+    padding-block: 0.5rem;
+    border-bottom-width: 1px;
+    border-bottom-style: solid;
+    border-color: #d0d7de;
 }
 .gh-table tbody tr:hover {
-    @apply bg-gh-muted cursor-pointer;
+    background-color: #f6f8fa;
+    cursor: pointer;
 }
 .gh-table tbody tr.active {
-    @apply bg-blue-50;
+    background-color: #eff6ff;
 }
-.gh-link { @apply text-gh-link hover:underline; }
+
+.gh-link {
+    color: #0969da;
+}
+.gh-link:hover {
+    text-decoration: underline;
+}
+
 .pill {
-    @apply inline-block px-2 py-0.5 rounded-full text-[10px] border border-gh-border text-gh-subtle;
+    display: inline-block;
+    padding-inline: 0.5rem;
+    padding-block: 0.125rem;
+    border-radius: 9999px;
+    font-size: 10px;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #d0d7de;
+    color: #656d76;
 }
 .pill-loaded {
-    @apply border-green-600 bg-gh-pillBg text-gh-pillText;
+    border-color: #16a34a;
+    background-color: #dafbe1;
+    color: #1f883d;
 }
+
 .chip {
-    @apply inline-block px-2 py-0.5 rounded-full text-[11px] border border-gh-border text-gh-subtle bg-white cursor-pointer;
+    display: inline-block;
+    padding-inline: 0.5rem;
+    padding-block: 0.125rem;
+    border-radius: 9999px;
+    font-size: 11px;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #d0d7de;
+    color: #656d76;
+    background-color: #ffffff;
+    cursor: pointer;
 }
 .chip-active {
-    @apply bg-gh-link text-white border-gh-link;
+    background-color: #0969da;
+    color: #ffffff;
+    border-color: #0969da;
 }
+
 .btn {
-    @apply px-2 py-1 text-xs border border-gh-border rounded bg-white text-gh-text hover:bg-gh-muted;
+    padding-inline: 0.5rem;
+    padding-block: 0.25rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #d0d7de;
+    border-radius: 0.25rem;
+    background-color: #ffffff;
+    color: #1f2328;
+}
+.btn:hover {
+    background-color: #f6f8fa;
 }
 .btn-primary {
-    @apply bg-gh-link text-white border-gh-link hover:bg-blue-700;
+    background-color: #0969da;
+    color: #ffffff;
+    border-color: #0969da;
+}
+.btn-primary:hover {
+    background-color: #1d4ed8;
 }
 .btn-danger {
-    @apply text-red-700 border-red-300 hover:bg-red-50;
+    color: #b91c1c;
+    border-color: #fca5a5;
 }
+.btn-danger:hover {
+    background-color: #fef2f2;
+}
+
 .input {
-    @apply px-2 py-1 border border-gh-border rounded text-sm bg-white text-gh-text focus:outline-none focus:border-gh-link;
+    padding-inline: 0.5rem;
+    padding-block: 0.25rem;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #d0d7de;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    background-color: #ffffff;
+    color: #1f2328;
 }
+.input:focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    border-color: #0969da;
+}
+
 .label {
-    @apply block text-xs uppercase text-gh-subtle font-semibold mb-1;
+    display: block;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    text-transform: uppercase;
+    color: #656d76;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
 }
+
 .kv {
-    @apply flex justify-between py-0.5 text-xs;
+    display: flex;
+    justify-content: space-between;
+    padding-block: 0.125rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
 }
-.kv b { @apply text-gh-text font-medium; }
+.kv b {
+    color: #1f2328;
+    font-weight: 500;
+}
 
-.prose-md h1, .prose-md h2, .prose-md h3 { @apply font-semibold mt-3 mb-1 text-gh-text; }
-.prose-md h1 { @apply text-base; }
-.prose-md h2 { @apply text-sm; }
-.prose-md h3 { @apply text-sm text-gh-subtle; }
-.prose-md p  { @apply text-sm text-gh-text my-2 leading-snug; }
-.prose-md ul { @apply list-disc list-inside text-sm my-2 pl-2; }
-.prose-md ol { @apply list-decimal list-inside text-sm my-2 pl-2; }
-.prose-md li { @apply my-0.5; }
-.prose-md code { @apply bg-gh-muted px-1 rounded text-[12px] font-mono; }
-.prose-md pre  { @apply bg-gh-muted p-2 rounded text-[12px] font-mono overflow-x-auto; }
-.prose-md a { @apply gh-link; }
-.prose-md hr { @apply my-3 border-gh-border; }
+.prose-md h1, .prose-md h2, .prose-md h3 {
+    font-weight: 600;
+    margin-top: 0.75rem;
+    margin-bottom: 0.25rem;
+    color: #1f2328;
+}
+.prose-md h1 {
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+.prose-md h2 {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+.prose-md h3 {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: #656d76;
+}
+.prose-md p {
+    font-size: 0.875rem;
+    color: #1f2328;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.375;
+}
+.prose-md ul {
+    list-style-type: disc;
+    list-style-position: inside;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-left: 0.5rem;
+}
+.prose-md ol {
+    list-style-type: decimal;
+    list-style-position: inside;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-left: 0.5rem;
+}
+.prose-md li {
+    margin-top: 0.125rem;
+    margin-bottom: 0.125rem;
+}
+.prose-md code {
+    background-color: #f6f8fa;
+    padding-inline: 0.25rem;
+    border-radius: 0.25rem;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.prose-md pre {
+    background-color: #f6f8fa;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    overflow-x: auto;
+}
+.prose-md a {
+    color: #0969da;
+}
+.prose-md a:hover {
+    text-decoration: underline;
+}
+.prose-md hr {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+    border-color: #d0d7de;
+}
 
-.pill-installed { @apply border-gh-border text-gh-subtle bg-white; }
-.pill-github    { @apply border-blue-200 text-gh-link bg-blue-50; }
-.pill-local     { @apply border-gh-border text-gh-subtle bg-white; }
+.pill-installed {
+    border-color: #d0d7de;
+    color: #656d76;
+    background-color: #ffffff;
+}
+.pill-github {
+    border-color: #bfdbfe;
+    color: #0969da;
+    background-color: #eff6ff;
+}
+.pill-local {
+    border-color: #d0d7de;
+    color: #656d76;
+    background-color: #ffffff;
+}
 
 /* Tighter chip row */
-.chip { @apply mr-1; }
+.chip {
+    margin-right: 0.25rem;
+}
