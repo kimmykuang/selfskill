@@ -55,7 +55,10 @@ window.appPages.renderGroup = async function (name) {
           <button class="btn" id="g-delete">Delete</button>
         </div>
       </div>
-      <p class="text-sm text-gh-subtle mb-3">${g.Description || "(no description)"}</p>
+      <p class="text-sm text-gh-subtle mb-3">
+        <span id="g-desc-text">${g.Description || "(no description)"}</span>
+        <button class="btn ml-2" id="g-desc-edit">Edit</button>
+      </p>
       ${section("Skills", g.Skills, "skill")}
       ${section("Plugins", g.Plugins, "plugin")}
       ${section("Prompts", g.Prompts, "prompt")}
@@ -67,6 +70,20 @@ window.appPages.renderGroup = async function (name) {
     if (!confirm("Delete group " + name + "?")) return;
     try { await window.api.deleteGroup(name); app.refreshGroups(); window.location.hash = "#/groups"; }
     catch (e) { app.showError(e); }
+  };
+  document.getElementById("g-desc-edit").onclick = async () => {
+    const newDesc = prompt("Description", g.Description || "");
+    if (newDesc === null) return;
+    try {
+      await window.api.updateGroup(name, {
+        description: newDesc,
+        skills: g.Skills || [],
+        plugins: g.Plugins || [],
+        prompts: g.Prompts || [],
+      });
+      app.showToast("Updated");
+      window.appPages.renderGroup.call(app, name);
+    } catch (e) { app.showError(e); }
   };
 
   function section(label, items, kind) {

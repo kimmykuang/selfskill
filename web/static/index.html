@@ -81,12 +81,12 @@
     </div>
 
     <!-- ⌘K palette -->
-    <dialog id="cmdk" class="rounded-lg border border-gh-border shadow-lg p-0 w-[480px]">
+    <dialog id="cmdk" aria-label="Command palette" class="rounded-lg border border-gh-border shadow-lg p-0 w-[480px]">
         <form method="dialog" class="contents">
             <input type="text" id="cmdk-input" placeholder="Type to search…"
                    class="w-full px-4 py-3 text-sm border-b border-gh-border focus:outline-none"
                    @input.debounce.150ms="runCmdKQuery($event.target.value)" />
-            <ul id="cmdk-list" class="max-h-72 overflow-y-auto text-sm">
+            <ul id="cmdk-list" role="listbox" class="max-h-72 overflow-y-auto text-sm">
                 <template x-for="(h, i) in cmdkHits" :key="h.Kind + ':' + h.Name">
                     <li class="px-4 py-2 hover:bg-gh-muted cursor-pointer flex justify-between"
                         :class="{'bg-gh-muted': cmdkActive === i}"
