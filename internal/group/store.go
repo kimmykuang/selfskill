@@ -1,6 +1,7 @@
 package group
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// ErrGroupAlreadyExists is returned by Create when a group with that name already exists.
+var ErrGroupAlreadyExists = errors.New("group already exists")
 
 // Store manages group YAML files under a base directory.
 type Store struct {
@@ -22,7 +26,7 @@ func NewStore(dir string) *Store {
 func (s *Store) Create(name string) error {
 	path := s.groupPath(name)
 	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("group %q already exists", name)
+		return fmt.Errorf("%w: %q", ErrGroupAlreadyExists, name)
 	}
 
 	g := &Group{

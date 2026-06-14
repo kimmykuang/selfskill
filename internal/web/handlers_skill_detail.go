@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/fs"
 	"net/http"
@@ -74,11 +75,18 @@ func (s *Server) handleSkillDiff(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusInternalServerError, "comparer not configured")
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	if err := s.Comparer.CompareSkill(name, w); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !s.SkillStore.Exists(name) {
+		httpError(w, http.StatusNotFound, "skill not found")
 		return
 	}
+	var buf bytes.Buffer
+	if err := s.Comparer.CompareSkill(name, &buf); err != nil {
+		httpError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
 }
 
 func (s *Server) handleSkillFiles(w http.ResponseWriter, r *http.Request) {

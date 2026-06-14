@@ -20,8 +20,12 @@ func (f *FakeRegistry) List() (map[string][]Entry, error) {
 }
 
 func (f *FakeRegistry) Add(name string, entry Entry) error {
-	if existing, ok := f.entries[name]; ok && len(existing) > 0 && existing[0].InstalledAt != "" && entry.InstalledAt == "" {
-		entry.InstalledAt = existing[0].InstalledAt
+	if entry.InstalledAt == "" {
+		if existing, ok := f.entries[name]; ok && len(existing) > 0 && existing[0].InstalledAt != "" {
+			entry.InstalledAt = existing[0].InstalledAt
+		} else {
+			entry.InstalledAt = entry.LastUpdated
+		}
 	}
 	f.entries[name] = []Entry{entry}
 	return nil

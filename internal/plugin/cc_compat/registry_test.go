@@ -114,6 +114,36 @@ func TestFakeRegistry(t *testing.T) {
 	}
 }
 
+func TestJSONRegistry_AddDefaultsInstalledAtFromLastUpdated(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "installed_plugins.json")
+	r := NewJSONRegistry(path)
+
+	// First install: no prior entry, no InstalledAt — should default to LastUpdated.
+	if err := r.Add("first@mp", Entry{Scope: "user", InstallPath: "/p", Version: "1", LastUpdated: "2026-06-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := r.List()
+	got := all["first@mp"][0]
+	if got.InstalledAt != "2026-06-01T00:00:00Z" {
+		t.Errorf("InstalledAt = %q, want default to LastUpdated 2026-06-01...", got.InstalledAt)
+	}
+}
+
+func TestFakeRegistry_AddDefaultsInstalledAtFromLastUpdated(t *testing.T) {
+	f := NewFakeRegistry()
+
+	// First install: no prior entry, no InstalledAt — should default to LastUpdated.
+	if err := f.Add("first@mp", Entry{Scope: "user", InstallPath: "/p", Version: "1", LastUpdated: "2026-06-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := f.List()
+	got := all["first@mp"][0]
+	if got.InstalledAt != "2026-06-01T00:00:00Z" {
+		t.Errorf("InstalledAt = %q, want default to LastUpdated 2026-06-01...", got.InstalledAt)
+	}
+}
+
 func TestJSONRegistry_PreservesUnrelatedPlugins(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "installed_plugins.json")

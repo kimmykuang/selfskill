@@ -44,17 +44,12 @@ func (l *Loader) Load(name string) error {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	installedAt := now
-	if all, err := l.registry.List(); err == nil {
-		if existing, ok := all[p.FullName()]; ok && len(existing) > 0 && existing[0].InstalledAt != "" {
-			installedAt = existing[0].InstalledAt
-		}
-	}
 	entry := cc_compat.Entry{
-		Scope:        "user",
-		InstallPath:  ccCachePath,
-		Version:      p.Version,
-		InstalledAt:  installedAt,
+		Scope:       "user",
+		InstallPath: ccCachePath,
+		Version:     p.Version,
+		// InstalledAt intentionally empty: cc_compat.Registry.Add preserves
+		// an existing value, or falls back to LastUpdated for first install.
 		LastUpdated:  now,
 		GitCommitSha: p.GitCommitSha,
 	}

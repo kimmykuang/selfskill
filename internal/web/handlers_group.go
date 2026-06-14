@@ -38,7 +38,11 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.GroupStore.Create(body.Name); err != nil {
-		httpError(w, http.StatusConflict, err.Error())
+		if errors.Is(err, group.ErrGroupAlreadyExists) {
+			httpError(w, http.StatusConflict, err.Error())
+			return
+		}
+		httpError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	g, err := s.GroupStore.Get(body.Name)

@@ -59,12 +59,16 @@ func (r *JSONRegistry) List() (map[string][]Entry, error) {
 }
 
 // Add inserts or replaces the entry list for a single plugin name.
-// The "InstalledAt" field of any pre-existing entry is preserved into the
-// first new entry, matching the previous loader.go behaviour.
+// If entry.InstalledAt is empty, the existing InstalledAt is preserved;
+// on first install with no prior entry, InstalledAt defaults to LastUpdated.
 func (r *JSONRegistry) Add(name string, entry Entry) error {
 	return r.withLock(func(f *file) error {
-		if existing, ok := f.Plugins[name]; ok && len(existing) > 0 && existing[0].InstalledAt != "" && entry.InstalledAt == "" {
-			entry.InstalledAt = existing[0].InstalledAt
+		if entry.InstalledAt == "" {
+			if existing, ok := f.Plugins[name]; ok && len(existing) > 0 && existing[0].InstalledAt != "" {
+				entry.InstalledAt = existing[0].InstalledAt
+			} else {
+				entry.InstalledAt = entry.LastUpdated
+			}
 		}
 		f.Plugins[name] = []Entry{entry}
 		return nil
