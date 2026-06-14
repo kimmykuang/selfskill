@@ -38,6 +38,7 @@ window.api = (function () {
     updateSkill: (name, body) => call("PUT", "/api/skills/" + encodeURIComponent(name), body),
     skillFiles: (name) => call("GET", "/api/skills/" + encodeURIComponent(name) + "/files"),
     skillFile: (name, p) => fetch("/api/skills/" + encodeURIComponent(name) + "/files/" + p).then(r => r.text()),
+    skillBody: (name) => fetch("/api/skills/" + encodeURIComponent(name) + "/files/SKILL.md").then(r => r.text()),
     skillDiff: (name) => fetch("/api/skills/" + encodeURIComponent(name) + "/diff").then(r => r.text()),
 
     listPrompts: (filter) => call("GET", "/api/prompts", undefined, filter),

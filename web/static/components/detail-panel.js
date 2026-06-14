@@ -10,20 +10,26 @@ window.appComponents.renderDetail = function (app, el, kind, data) {
   if (kind === "skill") {
     const md = window.appComponents.renderMarkdown(data._body || "");
     el.innerHTML = `
-      <div class="font-semibold mb-2">${data.Name}</div>
-      ${kv("Origin", data._origin || "")}
-      ${kv("Version", data.Version || "")}
-      ${kv("Source", data.Source || "")}
-      <div class="mt-2 flex gap-2">
-        <button class="btn" data-act="compare">Compare</button>
-        <button class="btn" data-act="edit">Edit</button>
+      <div class="font-semibold text-base mb-1">${data.Name}</div>
+      <div class="text-xs text-gh-subtle mb-3">${data.Description || ""}</div>
+      <div class="border border-gh-border rounded mb-3">
+        ${kv("Origin", `<span class="pill">${data._origin || "local"}</span>`)}
+        ${kv("Version", data.Version || "")}
+        ${kv("Source", data.Source ? `<a href="${data.Source}" target="_blank" class="gh-link">${data.Source}</a>` : "(local)")}
+        ${kv("Path", `<span class="text-gh-subtle text-xs">${data.DirPath || ""}</span>`)}
       </div>
-      <div class="mt-3 prose prose-sm max-w-none">${md}</div>
+      <div class="flex gap-2 mb-3">
+        <button class="btn" data-act="compare" ${data.Source ? "" : "disabled title='No upstream source'"}>Compare</button>
+        <button class="btn" data-act="edit">Edit</button>
+        <button class="btn" data-act="reload">Refresh</button>
+      </div>
+      <div class="prose-md" data-prose>${md || '<p class="text-gh-subtle text-xs">(empty body)</p>'}</div>
     `;
     el.querySelector('[data-act="compare"]').onclick = async () => {
+      const proseEl = el.querySelector("[data-prose]");
       try {
         const diff = await window.api.skillDiff(data.Name);
-        el.querySelector(".prose").innerHTML = `<pre class="whitespace-pre-wrap text-xs">${diff || "(no differences)"}</pre>`;
+        proseEl.innerHTML = `<pre class="whitespace-pre-wrap text-xs">${(diff || "(no differences)").replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;')}</pre>`;
       } catch (e) { app.showError(e); }
     };
     el.querySelector('[data-act="edit"]').onclick = () => {
@@ -32,6 +38,13 @@ window.appComponents.renderDetail = function (app, el, kind, data) {
       window.api.updateSkill(data.Name, { description: newDesc })
         .then(() => { app.showToast("Updated"); window.appPages.renderSkills.call(app); })
         .catch(e => app.showError(e));
+    };
+    el.querySelector('[data-act="reload"]').onclick = async () => {
+      try {
+        const fresh = await window.api.skillBody(data.Name);
+        const proseEl = el.querySelector("[data-prose]");
+        proseEl.innerHTML = window.appComponents.renderMarkdown(fresh.replace(/^---\n[\s\S]*?\n---\n?/, "")) || "(empty body)";
+      } catch (e) { app.showError(e); }
     };
     return;
   }

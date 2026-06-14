@@ -43,12 +43,20 @@ window.appPages.renderSkills = async function (filterOverride) {
       <td class="text-gh-subtle">${sk.Source || ""}</td>
       <td>${sk.Version || ""}</td>
     `;
-    tr.addEventListener("click", () => {
+    tr.addEventListener("click", async () => {
       tbody.querySelectorAll("tr").forEach(r => r.classList.remove("active"));
       tr.classList.add("active");
-      // Decorate with the lowercase _origin/_body for detail rendering.
-      app.setDetail("skill", { ...sk, _origin: sk.Origin });
+      let body = "";
+      try { body = await window.api.skillBody(sk.Name); } catch (e) { /* ignore — show without body */ }
+      const stripped = stripFrontmatter(body);
+      app.setDetail("skill", { ...sk, _origin: sk.Origin, _body: stripped });
     });
     tbody.appendChild(tr);
   });
 };
+
+function stripFrontmatter(md) {
+  if (!md) return "";
+  const m = md.match(/^---\n[\s\S]*?\n---\n?/);
+  return m ? md.slice(m[0].length) : md;
+}
