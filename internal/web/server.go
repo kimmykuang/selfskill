@@ -71,6 +71,12 @@ func (s *Server) Start() error {
 	// Phase 4 — search.
 	mux.HandleFunc("GET /api/search", s.handleSearch)
 
+	// Phase 4 — skill detail.
+	mux.HandleFunc("PUT /api/skills/{name}", s.handleUpdateSkill)
+	mux.HandleFunc("GET /api/skills/{name}/diff", s.handleSkillDiff)
+	mux.HandleFunc("GET /api/skills/{name}/files", s.handleSkillFiles)
+	mux.HandleFunc("GET /api/skills/{name}/files/{path...}", s.handleSkillFile)
+
 	// Static files
 	mux.Handle("/", http.FileServer(http.FS(s.StaticFS)))
 
