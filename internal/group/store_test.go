@@ -1,6 +1,8 @@
 package group
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -90,5 +92,27 @@ func TestStore_Delete(t *testing.T) {
 	}
 	if _, err := store.Get("to-delete"); err == nil {
 		t.Fatal("expected error after delete")
+	}
+}
+
+func TestStore_OldYAMLWithoutPromptsField(t *testing.T) {
+	dir := t.TempDir()
+	// Write a group YAML in the pre-Phase-3 shape — no `prompts:` field at all.
+	path := filepath.Join(dir, "legacy.yaml")
+	yamlData := []byte("name: legacy\ndescription: pre-phase3\nskills: [a, b]\nplugins: [x]\n")
+	if err := os.WriteFile(path, yamlData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewStore(dir)
+	g, err := s.Get("legacy")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if g.Name != "legacy" || len(g.Skills) != 2 || len(g.Plugins) != 1 {
+		t.Errorf("legacy fields lost: %+v", g)
+	}
+	if len(g.Prompts) != 0 {
+		t.Errorf("Prompts should be empty, got %v", g.Prompts)
 	}
 }
