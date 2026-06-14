@@ -5,17 +5,14 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/kimmykuang/selfskill/internal/group"
 	"github.com/kimmykuang/selfskill/internal/linker"
-	"github.com/kimmykuang/selfskill/internal/plugin"
+	"github.com/kimmykuang/selfskill/internal/service"
 	"github.com/spf13/cobra"
 )
 
-func newUnloadCmd(groupStore *group.Store, lnk *linker.Linker, pluginLoader *plugin.Loader) *cobra.Command {
-	var (
-		scope string
-		all   bool
-	)
+func newUnloadCmd(svc *service.Service, lnk *linker.Linker) *cobra.Command {
+	var scope string
+	var all bool
 
 	cmd := &cobra.Command{
 		Use:   "unload [group]",
@@ -29,63 +26,37 @@ func newUnloadCmd(groupStore *group.Store, lnk *linker.Linker, pluginLoader *plu
 				if err != nil {
 					return err
 				}
-
-				if len(results) == 0 {
-					fmt.Fprintf(os.Stdout, "No skills loaded in %s scope.\n", scope)
-					return nil
-				}
-
-				w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-				fmt.Fprintf(w, "SKILL\tACTION\tDETAIL\n")
-				for _, r := range results {
-					fmt.Fprintf(w, "%s\t%s\t%s\n", r.SkillName, r.Action, r.Detail)
-				}
-				return w.Flush()
+				return printSkillResults(os.Stdout, results)
 			}
 
-			if len(args) == 0 {
-				return fmt.Errorf("provide a group name or use --all")
+			if len(args) != 1 {
+				return fmt.Errorf("unload requires a group name (or --all)")
 			}
-
-			groupName := args[0]
-			g, err := groupStore.Get(groupName)
+			report, err := svc.UnloadGroup(args[0], s)
 			if err != nil {
 				return err
 			}
-
-			if len(g.Skills) == 0 && len(g.Plugins) == 0 {
-				fmt.Fprintf(os.Stdout, "Group %q is empty.\n", groupName)
-				return nil
-			}
-
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintf(w, "ITEM\tTYPE\tACTION\tDETAIL\n")
-
-			// Unload skills
-			if len(g.Skills) > 0 {
-				results, err := lnk.Unload(g.Skills, s)
-				if err != nil {
-					return err
-				}
-				for _, r := range results {
-					fmt.Fprintf(w, "%s\tskill\t%s\t%s\n", r.SkillName, r.Action, r.Detail)
-				}
+			for _, r := range report.Skills {
+				fmt.Fprintf(w, "%s\tskill\t%s\t%s\n", r.SkillName, r.Action, r.Detail)
 			}
-
-			// Unload plugins
-			for _, pName := range g.Plugins {
-				if err := pluginLoader.Unload(pName); err != nil {
-					fmt.Fprintf(w, "%s\tplugin\terror\t%s\n", pName, err.Error())
-				} else {
-					fmt.Fprintf(w, "%s\tplugin\tunloaded\t\n", pName)
-				}
+			for _, r := range report.Plugins {
+				fmt.Fprintf(w, "%s\tplugin\t%s\t%s\n", r.Name, r.Action, r.Detail)
 			}
-
 			return w.Flush()
 		},
 	}
-
 	cmd.Flags().StringVar(&scope, "scope", "user", "Target scope for skills: user or project")
-	cmd.Flags().BoolVar(&all, "all", false, "Unload all skills from the scope")
+	cmd.Flags().BoolVar(&all, "all", false, "Unload all ss-managed skills in scope")
 	return cmd
+}
+
+func printSkillResults(w *os.File, results []linker.LinkResult) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(tw, "SKILL\tACTION\tDETAIL\n")
+	for _, r := range results {
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", r.SkillName, r.Action, r.Detail)
+	}
+	return tw.Flush()
 }

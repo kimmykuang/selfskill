@@ -9,7 +9,9 @@ import (
 	"github.com/kimmykuang/selfskill/internal/installer"
 	"github.com/kimmykuang/selfskill/internal/linker"
 	"github.com/kimmykuang/selfskill/internal/plugin"
+	"github.com/kimmykuang/selfskill/internal/plugin/cc_compat"
 	"github.com/kimmykuang/selfskill/internal/prompt"
+	"github.com/kimmykuang/selfskill/internal/service"
 	"github.com/kimmykuang/selfskill/internal/skill"
 	"github.com/spf13/cobra"
 )
@@ -24,26 +26,34 @@ func NewRootCmd(version string, staticFS fs.FS) *cobra.Command {
 		},
 	}
 
-	// Initialize stores
 	skillStore := skill.NewStore(config.SkillsDir())
 	promptStore := prompt.NewStore(config.PromptsDir())
 	groupStore := group.NewStore(config.GroupsDir())
 	pluginStore := plugin.NewStore(config.PluginsDir())
 
-	// Initialize services
 	inst := installer.New(skillStore, promptStore)
 	lnk := linker.New(config.SkillsDir())
 	registry := plugin.NewRegistry()
-	pluginLoader := plugin.NewLoader(pluginStore)
+	ccRegistry := cc_compat.NewJSONRegistry(config.CCInstalledPluginsFile())
+	pluginLoader := plugin.NewLoaderWithRegistry(pluginStore, ccRegistry)
 	cmpr := compare.New(pluginStore, skillStore)
 
-	// Register commands
+	svc := service.New(service.Deps{
+		Skills:       skillStore,
+		Prompts:      promptStore,
+		Groups:       groupStore,
+		Plugins:      pluginStore,
+		Linker:       lnk,
+		PluginLoader: pluginLoader,
+		Registry:     ccRegistry,
+	})
+
 	cmd.AddCommand(newInstallCmd(inst))
 	cmd.AddCommand(newSkillCmd(skillStore))
 	cmd.AddCommand(newPromptCmd(promptStore))
 	cmd.AddCommand(newGroupCmd(groupStore))
-	cmd.AddCommand(newLoadCmd(groupStore, lnk, pluginLoader))
-	cmd.AddCommand(newUnloadCmd(groupStore, lnk, pluginLoader))
+	cmd.AddCommand(newLoadCmd(svc))
+	cmd.AddCommand(newUnloadCmd(svc, lnk))
 	cmd.AddCommand(newStatusCmd(lnk))
 	cmd.AddCommand(newPluginCmd(pluginStore, registry, pluginLoader))
 	cmd.AddCommand(newCompareCmd(cmpr))
