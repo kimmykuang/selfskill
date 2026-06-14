@@ -1,0 +1,138 @@
+// Package cc_compat is the only place in ss that touches CC's private
+// installed_plugins.json file. Centralizing the file format here means a
+// CC schema change is a one-file fix, not a fleet refactor.
+package cc_compat
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"syscall"
+)
+
+// Entry mirrors a single object in installed_plugins.json under
+// the "plugins"[name] array. Fields match CC's current (version: 2) format.
+type Entry struct {
+	Scope        string `json:"scope"`
+	ProjectPath  string `json:"projectPath,omitempty"`
+	InstallPath  string `json:"installPath"`
+	Version      string `json:"version"`
+	InstalledAt  string `json:"installedAt"`
+	LastUpdated  string `json:"lastUpdated"`
+	GitCommitSha string `json:"gitCommitSha,omitempty"`
+}
+
+// File mirrors the on-disk structure.
+type File struct {
+	Version int                `json:"version"`
+	Plugins map[string][]Entry `json:"plugins"`
+}
+
+// Registry is the stable interface ss uses internally; behind it lives
+// whatever CC currently expects on disk.
+type Registry interface {
+	List() (map[string][]Entry, error)
+	Add(name string, entry Entry) error
+	Remove(name string) error
+}
+
+// JSONRegistry implements Registry against the current (version: 2) JSON file.
+type JSONRegistry struct {
+	path string
+}
+
+func NewJSONRegistry(path string) *JSONRegistry {
+	return &JSONRegistry{path: path}
+}
+
+// List returns a snapshot of every entry. Missing file returns an empty map.
+func (r *JSONRegistry) List() (map[string][]Entry, error) {
+	f, err := r.read()
+	if err != nil {
+		return nil, err
+	}
+	return f.Plugins, nil
+}
+
+// Add inserts or replaces the entry list for a single plugin name.
+// The "InstalledAt" field of any pre-existing entry is preserved into the
+// first new entry, matching the previous loader.go behaviour.
+func (r *JSONRegistry) Add(name string, entry Entry) error {
+	return r.withLock(func(f *File) error {
+		if existing, ok := f.Plugins[name]; ok && len(existing) > 0 && existing[0].InstalledAt != "" && entry.InstalledAt == "" {
+			entry.InstalledAt = existing[0].InstalledAt
+		}
+		f.Plugins[name] = []Entry{entry}
+		return nil
+	})
+}
+
+// Remove deletes the entry list for a single plugin name.
+// Removing a non-existent name is a no-op (matches map delete).
+func (r *JSONRegistry) Remove(name string) error {
+	return r.withLock(func(f *File) error {
+		delete(f.Plugins, name)
+		return nil
+	})
+}
+
+func (r *JSONRegistry) withLock(fn func(*File) error) error {
+	if err := os.MkdirAll(filepath.Dir(r.path), 0755); err != nil {
+		return err
+	}
+
+	lockPath := r.path + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return fmt.Errorf("creating lock file: %w", err)
+	}
+	defer lockFile.Close()
+
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+
+	f, err := r.read()
+	if err != nil {
+		return err
+	}
+	if err := fn(f); err != nil {
+		return err
+	}
+	return r.write(f)
+}
+
+func (r *JSONRegistry) read() (*File, error) {
+	data, err := os.ReadFile(r.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &File{Version: 2, Plugins: map[string][]Entry{}}, nil
+		}
+		return nil, fmt.Errorf("reading installed plugins: %w", err)
+	}
+
+	var f File
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("parsing installed plugins: %w", err)
+	}
+	if f.Plugins == nil {
+		f.Plugins = map[string][]Entry{}
+	}
+	return &f, nil
+}
+
+func (r *JSONRegistry) write(f *File) error {
+	data, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	tmp := r.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, r.path)
+}
