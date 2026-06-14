@@ -78,3 +78,30 @@ func TestUnloadGroup_RemovesSkillLinks(t *testing.T) {
 		t.Errorf("link path %s should be gone", linkPath)
 	}
 }
+
+func TestLoadGroup_PromptsAreInert(t *testing.T) {
+	svc, root := testService(t)
+	writeSkill(t, root, "alpha", "name: alpha\n")
+	writePrompt(t, root, "p1", "id: p1\ndescription: a prompt\n")
+
+	if err := svc.deps.Groups.Create("g1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.deps.Groups.AddSkill("g1", "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.deps.Groups.AddPrompt("g1", "p1"); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := svc.LoadGroup("g1", linker.ScopeUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Skills) != 1 {
+		t.Fatalf("expected 1 skill result, got %d", len(report.Skills))
+	}
+	if len(report.Plugins) != 0 {
+		t.Errorf("Plugins should be empty when group has no plugins, got %d", len(report.Plugins))
+	}
+}
