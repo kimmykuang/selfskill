@@ -50,6 +50,15 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /api/plugins/{name}/unload", s.handlePluginUnload)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 
+	// Phase 4 — group endpoints.
+	mux.HandleFunc("GET /api/groups", s.handleListGroups)
+	mux.HandleFunc("POST /api/groups", s.handleCreateGroup)
+	mux.HandleFunc("GET /api/groups/{name}", s.handleGetGroup)
+	mux.HandleFunc("PUT /api/groups/{name}", s.handleUpdateGroup)
+	mux.HandleFunc("DELETE /api/groups/{name}", s.handleDeleteGroup)
+	mux.HandleFunc("POST /api/groups/{name}/load", s.handleLoadGroup)
+	mux.HandleFunc("POST /api/groups/{name}/unload", s.handleUnloadGroup)
+
 	// Static files
 	mux.Handle("/", http.FileServer(http.FS(s.StaticFS)))
 

@@ -186,6 +186,15 @@ func (s *Store) RemovePrompt(groupName, promptID string) error {
 	return s.save(g)
 }
 
+// SaveReplace overwrites a group's contents (description / skills / plugins / prompts).
+// The group must already exist.
+func (s *Store) SaveReplace(g *Group) error {
+	if _, err := os.Stat(s.groupPath(g.Name)); os.IsNotExist(err) {
+		return fmt.Errorf("group %q not found", g.Name)
+	}
+	return s.save(g)
+}
+
 func (s *Store) save(g *Group) error {
 	data, err := yaml.Marshal(g)
 	if err != nil {
