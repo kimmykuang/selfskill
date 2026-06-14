@@ -3,6 +3,7 @@ package cli
 import (
 	"io/fs"
 
+	"github.com/kimmykuang/selfskill/internal/compare"
 	"github.com/kimmykuang/selfskill/internal/config"
 	"github.com/kimmykuang/selfskill/internal/group"
 	"github.com/kimmykuang/selfskill/internal/installer"
@@ -34,6 +35,7 @@ func NewRootCmd(version string, staticFS fs.FS) *cobra.Command {
 	lnk := linker.New(config.SkillsDir())
 	registry := plugin.NewRegistry()
 	pluginLoader := plugin.NewLoader(pluginStore)
+	cmpr := compare.New(pluginStore, skillStore)
 
 	// Register commands
 	cmd.AddCommand(newInstallCmd(inst))
@@ -44,6 +46,7 @@ func NewRootCmd(version string, staticFS fs.FS) *cobra.Command {
 	cmd.AddCommand(newUnloadCmd(groupStore, lnk, pluginLoader))
 	cmd.AddCommand(newStatusCmd(lnk))
 	cmd.AddCommand(newPluginCmd(pluginStore, registry, pluginLoader))
+	cmd.AddCommand(newCompareCmd(cmpr))
 	cmd.AddCommand(newWebCmd(skillStore, promptStore, pluginStore, pluginLoader, lnk, staticFS))
 
 	return cmd

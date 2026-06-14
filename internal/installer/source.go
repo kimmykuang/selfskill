@@ -17,6 +17,7 @@ type FetchResult struct {
 	DirPath string // local directory path (for dir-based skills)
 	IsDir   bool   // true if DirPath is set
 	Content []byte // raw content (for single-file skills)
+	Source  string // original source URL (set only for remote sources like URLSource)
 }
 
 // Source represents a skill source that can be fetched.
@@ -31,13 +32,13 @@ func ResolveSource(input string) Source {
 
 func resolveSourceWithClient(input string, client *http.Client) Source {
 	if isURL(input) {
-		return &URLSource{url: resolveGitHubURL(input), httpClient: client}
+		return &URLSource{url: resolveGitHubURL(input), origURL: input, httpClient: client}
 	}
 
 	info, err := os.Stat(input)
 	if err != nil {
 		// Treat as URL if can't stat
-		return &URLSource{url: input, httpClient: client}
+		return &URLSource{url: input, origURL: input, httpClient: client}
 	}
 
 	if !info.IsDir() {
@@ -57,6 +58,7 @@ func resolveSourceWithClient(input string, client *http.Client) Source {
 // URLSource downloads a single file from a URL.
 type URLSource struct {
 	url        string
+	origURL    string // original user-supplied URL (before resolveGitHubURL)
 	httpClient *http.Client
 }
 
@@ -75,7 +77,11 @@ func (s *URLSource) Fetch() ([]FetchResult, error) {
 		}
 	}
 
-	return []FetchResult{{Name: name, Content: content, IsDir: false}}, nil
+	src := s.origURL
+	if src == "" {
+		src = s.url
+	}
+	return []FetchResult{{Name: name, Content: content, IsDir: false, Source: src}}, nil
 }
 
 // LocalFileSource copies a single .md file.

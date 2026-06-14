@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -222,14 +223,187 @@ func TestValidateGitURL(t *testing.T) {
 		{"https://github.com/user/repo.git", false},
 		{"http://example.com/repo.git", false},
 		{"git@github.com:user/repo.git", false},
+		{"file:///tmp/repo.git", false},
 		{"--upload-pack=evil", true},
 		{"/local/path", true},
-		{"file:///etc/passwd", true},
 	}
 	for _, tt := range tests {
 		err := validateGitURL(tt.url)
 		if (err != nil) != tt.wantErr {
 			t.Errorf("validateGitURL(%q) err=%v, wantErr=%v", tt.url, err, tt.wantErr)
 		}
+	}
+}
+
+func TestStore_GetMeta_NotPresent(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	pluginDir := filepath.Join(dir, "mp", "no-meta", "v1")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	meta, err := store.GetMeta("no-meta@mp")
+	if err != nil {
+		t.Fatalf("GetMeta failed: %v", err)
+	}
+	if meta != nil {
+		t.Errorf("expected nil meta, got %+v", meta)
+	}
+}
+
+func TestStore_GetMeta_Parses(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	pluginDir := filepath.Join(dir, "mp", "with-meta", "v1")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	want := &PluginMeta{
+		URL:         "https://example.com/repo.git",
+		Marketplace: "mp",
+		CommitSha:   "deadbeef",
+		Version:     "v1",
+		InstalledAt: "2026-05-27T00:00:00Z",
+	}
+	data, err := json.MarshalIndent(want, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, metaFileName), data, 0644); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+
+	got, err := store.GetMeta("with-meta@mp")
+	if err != nil {
+		t.Fatalf("GetMeta failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected meta, got nil")
+	}
+	if got.URL != want.URL || got.Marketplace != want.Marketplace ||
+		got.CommitSha != want.CommitSha || got.Version != want.Version ||
+		got.InstalledAt != want.InstalledAt {
+		t.Errorf("meta mismatch: got %+v want %+v", got, want)
+	}
+}
+
+func TestStore_GetRemoteURL_NoMeta(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	pluginDir := filepath.Join(dir, "mp", "bare", "v1")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	_, err := store.GetRemoteURL("bare@mp")
+	if err == nil {
+		t.Fatal("expected error when meta missing")
+	}
+}
+
+func TestStore_GetRemoteURL_EmptyURL(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	pluginDir := filepath.Join(dir, "mp", "local", "v1")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	meta := &PluginMeta{Marketplace: "mp", Version: "v1"}
+	data, _ := json.MarshalIndent(meta, "", "  ")
+	if err := os.WriteFile(filepath.Join(pluginDir, metaFileName), data, 0644); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+
+	_, err := store.GetRemoteURL("local@mp")
+	if err == nil {
+		t.Fatal("expected error when meta has empty url")
+	}
+}
+
+func TestStore_ListBackfillsMeta(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	pluginDir := filepath.Join(dir, "mp", "ploog", "v1")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	meta := &PluginMeta{
+		URL:         "https://example.com/ploog.git",
+		Marketplace: "mp",
+		CommitSha:   "abc1234",
+		Version:     "v1",
+		InstalledAt: "2026-05-27T00:00:00Z",
+	}
+	data, _ := json.MarshalIndent(meta, "", "  ")
+	if err := os.WriteFile(filepath.Join(pluginDir, metaFileName), data, 0644); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+
+	plugins, err := store.List()
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	}
+	if plugins[0].RemoteURL != meta.URL {
+		t.Errorf("expected RemoteURL=%q, got %q", meta.URL, plugins[0].RemoteURL)
+	}
+	if plugins[0].GitCommitSha != meta.CommitSha {
+		t.Errorf("expected GitCommitSha=%q, got %q", meta.CommitSha, plugins[0].GitCommitSha)
+	}
+}
+
+func TestStore_GetBackfillsMeta(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	pluginDir := filepath.Join(dir, "mp", "gp", "v1")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	meta := &PluginMeta{
+		URL:         "https://example.com/gp.git",
+		Marketplace: "mp",
+		CommitSha:   "feedface",
+		Version:     "v1",
+		InstalledAt: "2026-05-27T00:00:00Z",
+	}
+	data, _ := json.MarshalIndent(meta, "", "  ")
+	if err := os.WriteFile(filepath.Join(pluginDir, metaFileName), data, 0644); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+
+	p, err := store.Get("gp@mp")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if p.RemoteURL != meta.URL {
+		t.Errorf("expected RemoteURL=%q, got %q", meta.URL, p.RemoteURL)
+	}
+	if p.GitCommitSha != meta.CommitSha {
+		t.Errorf("expected GitCommitSha=%q, got %q", meta.CommitSha, p.GitCommitSha)
+	}
+}
+
+func TestStore_Update_NoMeta(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	pluginDir := filepath.Join(dir, "mp", "stale", "v1")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	err := store.Update("stale@mp")
+	if err == nil {
+		t.Fatal("expected error when no meta present")
 	}
 }

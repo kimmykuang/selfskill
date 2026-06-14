@@ -143,6 +143,24 @@ func (i *Installer) installOneSkill(fr FetchResult, force bool) InstallResult {
 		}
 	}
 
+	// If the skill came from a remote source, persist the original URL into
+	// SKILL.md frontmatter under the `source` key so `ss compare` can use it.
+	if fr.Source != "" {
+		skillMD := filepath.Join(i.skillStore.SkillDir(fr.Name), "SKILL.md")
+		if data, err := os.ReadFile(skillMD); err == nil {
+			meta, body, perr := frontmatter.Parse(data)
+			if perr == nil {
+				if meta == nil {
+					meta = make(map[string]interface{})
+				}
+				meta["source"] = fr.Source
+				if out, merr := frontmatter.Marshal(meta, body); merr == nil {
+					_ = os.WriteFile(skillMD, out, 0644)
+				}
+			}
+		}
+	}
+
 	return InstallResult{
 		Name:   fr.Name,
 		Path:   i.skillStore.SkillDir(fr.Name),

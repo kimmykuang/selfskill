@@ -3,8 +3,10 @@ package installer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/kimmykuang/selfskill/internal/frontmatter"
 	"github.com/kimmykuang/selfskill/internal/prompt"
 	"github.com/kimmykuang/selfskill/internal/skill"
 )
@@ -146,5 +148,89 @@ func TestResolveGitHubURL(t *testing.T) {
 		if got != tt.expected {
 			t.Errorf("resolveGitHubURL(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
+	}
+}
+
+// TestInstallSkill_LocalDir_NoSource verifies a skill installed from a local
+// directory does not get a `source` field written to its SKILL.md frontmatter.
+func TestInstallSkill_LocalDir_NoSource(t *testing.T) {
+	skillsDir := t.TempDir()
+	promptsDir := t.TempDir()
+	ss := skill.NewStore(skillsDir)
+	ps := prompt.NewStore(promptsDir)
+	inst := New(ss, ps)
+
+	srcDir := t.TempDir()
+	os.MkdirAll(filepath.Join(srcDir, "local-skill"), 0755)
+	os.WriteFile(filepath.Join(srcDir, "local-skill", "SKILL.md"), []byte(`---
+name: local-skill
+version: 1.0.0
+---
+# Local
+`), 0644)
+
+	results, err := inst.InstallSkill(filepath.Join(srcDir, "local-skill"), false)
+	if err != nil {
+		t.Fatalf("InstallSkill failed: %v", err)
+	}
+	if len(results) != 1 || results[0].Action != "installed" {
+		t.Fatalf("unexpected install result: %+v", results)
+	}
+
+	data, err := os.ReadFile(filepath.Join(skillsDir, "local-skill", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read installed SKILL.md: %v", err)
+	}
+	if strings.Contains(string(data), "source:") {
+		t.Errorf("local-dir skill should not have source field, got:\n%s", data)
+	}
+	meta, _, err := frontmatter.Parse(data)
+	if err != nil {
+		t.Fatalf("parse frontmatter: %v", err)
+	}
+	if _, ok := meta["source"]; ok {
+		t.Errorf("local-dir skill metadata should not contain source, got: %v", meta)
+	}
+}
+
+// TestInstallOneSkill_WritesSourceFromFetchResult verifies that when a
+// FetchResult carries a Source URL, installOneSkill writes it into the
+// installed SKILL.md frontmatter.
+func TestInstallOneSkill_WritesSourceFromFetchResult(t *testing.T) {
+	skillsDir := t.TempDir()
+	promptsDir := t.TempDir()
+	ss := skill.NewStore(skillsDir)
+	ps := prompt.NewStore(promptsDir)
+	inst := New(ss, ps)
+
+	const url = "https://example.com/foo.md"
+	fr := FetchResult{
+		Name: "foo",
+		Content: []byte(`---
+name: foo
+version: 0.1.0
+---
+# Foo
+`),
+		IsDir:  false,
+		Source: url,
+	}
+
+	res := inst.installOneSkill(fr, false)
+	if res.Action != "installed" {
+		t.Fatalf("expected installed, got %s (%s)", res.Action, res.Detail)
+	}
+
+	data, err := os.ReadFile(filepath.Join(skillsDir, "foo", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read installed SKILL.md: %v", err)
+	}
+	meta, _, err := frontmatter.Parse(data)
+	if err != nil {
+		t.Fatalf("parse frontmatter: %v", err)
+	}
+	got, _ := meta["source"].(string)
+	if got != url {
+		t.Errorf("source = %q, want %q\nfile:\n%s", got, url, data)
 	}
 }

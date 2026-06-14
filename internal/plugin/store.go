@@ -1,14 +1,19 @@
 package plugin
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kimmykuang/selfskill/internal/config"
 )
+
+const metaFileName = ".ss-meta.json"
 
 // Store manages plugin source files under ~/ss/plugins/.
 type Store struct {
@@ -52,12 +57,14 @@ func (s *Store) List() ([]Plugin, error) {
 				if !v.IsDir() {
 					continue
 				}
-				plugins = append(plugins, Plugin{
+				p := Plugin{
 					Name:        pd.Name(),
 					Marketplace: mp.Name(),
 					Version:     v.Name(),
 					InstallPath: filepath.Join(mpDir, pd.Name(), v.Name()),
-				})
+				}
+				applyMeta(&p)
+				plugins = append(plugins, p)
 			}
 		}
 	}
@@ -77,12 +84,14 @@ func (s *Store) Get(name string) (*Plugin, error) {
 		}
 		for _, v := range versions {
 			if v.IsDir() {
-				return &Plugin{
+				p := &Plugin{
 					Name:        pluginName,
 					Marketplace: marketplace,
 					Version:     v.Name(),
 					InstallPath: filepath.Join(mpDir, v.Name()),
-				}, nil
+				}
+				applyMeta(p)
+				return p, nil
 			}
 		}
 		return nil, fmt.Errorf("plugin %q not found in %s", name, s.dir)
@@ -104,12 +113,14 @@ func (s *Store) Get(name string) (*Plugin, error) {
 		}
 		for _, v := range versions {
 			if v.IsDir() {
-				return &Plugin{
+				p := &Plugin{
 					Name:        pluginName,
 					Marketplace: mp.Name(),
 					Version:     v.Name(),
 					InstallPath: filepath.Join(mpDir, v.Name()),
-				}, nil
+				}
+				applyMeta(p)
+				return p, nil
 			}
 		}
 	}
@@ -220,8 +231,27 @@ func (s *Store) InstallFromGit(gitURL, marketplace, pluginName, version string) 
 		}
 	}
 
-	// Get the actual commit sha
+	// Get the actual commit sha before .git is removed.
 	sha := getGitSha(destDir)
+
+	// Persist install metadata.
+	meta := &PluginMeta{
+		URL:         gitURL,
+		Marketplace: marketplace,
+		CommitSha:   sha,
+		Version:     version,
+		InstalledAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := writeMeta(destDir, meta); err != nil {
+		os.RemoveAll(destDir)
+		return nil, fmt.Errorf("writing plugin meta: %w", err)
+	}
+
+	// Drop the .git directory — we no longer rely on it.
+	if err := os.RemoveAll(filepath.Join(destDir, ".git")); err != nil {
+		os.RemoveAll(destDir)
+		return nil, fmt.Errorf("removing .git: %w", err)
+	}
 
 	return &Plugin{
 		Name:         pluginName,
@@ -229,6 +259,7 @@ func (s *Store) InstallFromGit(gitURL, marketplace, pluginName, version string) 
 		Version:      version,
 		InstallPath:  destDir,
 		GitCommitSha: sha,
+		RemoteURL:    gitURL,
 	}, nil
 }
 
@@ -251,7 +282,26 @@ func (s *Store) InstallFromLocal(srcDir, marketplace, pluginName, version string
 		return nil, fmt.Errorf("copying plugin: %w", err)
 	}
 
+	// Read sha from a possibly-copied .git before deleting it.
 	sha := getGitSha(destDir)
+
+	meta := &PluginMeta{
+		URL:         "",
+		Marketplace: marketplace,
+		CommitSha:   sha,
+		Version:     version,
+		InstalledAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := writeMeta(destDir, meta); err != nil {
+		os.RemoveAll(destDir)
+		return nil, fmt.Errorf("writing plugin meta: %w", err)
+	}
+
+	// Drop .git if it was copied along.
+	if err := os.RemoveAll(filepath.Join(destDir, ".git")); err != nil {
+		os.RemoveAll(destDir)
+		return nil, fmt.Errorf("removing .git: %w", err)
+	}
 
 	return &Plugin{
 		Name:         pluginName,
@@ -262,23 +312,105 @@ func (s *Store) InstallFromLocal(srcDir, marketplace, pluginName, version string
 	}, nil
 }
 
-// Update pulls the latest changes for a plugin.
+// GetMeta loads .ss-meta.json for a plugin. Returns (nil, nil) if the file does not exist.
+func (s *Store) GetMeta(name string) (*PluginMeta, error) {
+	p, err := s.Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return readMeta(p.InstallPath)
+}
+
+// GetRemoteURL returns the remote git URL recorded in .ss-meta.json.
+func (s *Store) GetRemoteURL(name string) (string, error) {
+	meta, err := s.GetMeta(name)
+	if err != nil {
+		return "", err
+	}
+	if meta == nil || meta.URL == "" {
+		return "", fmt.Errorf("no remote url for plugin %q", name)
+	}
+	return meta.URL, nil
+}
+
+// Update refreshes a plugin by re-cloning its remote into a temp dir and
+// swapping the contents of the install path.
 func (s *Store) Update(name string) error {
 	p, err := s.Get(name)
 	if err != nil {
 		return err
 	}
 
-	// Check if it's a git repo
-	gitDir := filepath.Join(p.InstallPath, ".git")
-	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		return fmt.Errorf("plugin %q is not a git repository, cannot update", name)
+	meta, err := readMeta(p.InstallPath)
+	if err != nil {
+		return fmt.Errorf("reading plugin meta: %w", err)
+	}
+	if meta == nil || meta.URL == "" {
+		return fmt.Errorf("plugin %q has no remote url, cannot update", name)
 	}
 
-	cmd := exec.Command("git", "-C", p.InstallPath, "pull")
+	if err := validateGitURL(meta.URL); err != nil {
+		return err
+	}
+
+	tmpDir, err := os.MkdirTemp("", "ss-plugin-update-*")
+	if err != nil {
+		return fmt.Errorf("creating temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cloneDir := filepath.Join(tmpDir, "src")
+	cmd := exec.Command("git", "clone", "--depth", "1", meta.URL, cloneDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git clone failed: %w", err)
+	}
+
+	// Capture sha before stripping .git.
+	sha := getGitSha(cloneDir)
+
+	// Drop .git from the freshly cloned tree before copying.
+	if err := os.RemoveAll(filepath.Join(cloneDir, ".git")); err != nil {
+		return fmt.Errorf("removing .git from clone: %w", err)
+	}
+
+	// Wipe the install path, preserving .ss-meta.json so we can rewrite it.
+	entries, err := os.ReadDir(p.InstallPath)
+	if err != nil {
+		return fmt.Errorf("reading install path: %w", err)
+	}
+	for _, e := range entries {
+		if e.Name() == metaFileName {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(p.InstallPath, e.Name())); err != nil {
+			return fmt.Errorf("clearing install path: %w", err)
+		}
+	}
+
+	// Copy the cloned contents into the install path.
+	srcEntries, err := os.ReadDir(cloneDir)
+	if err != nil {
+		return fmt.Errorf("reading clone dir: %w", err)
+	}
+	for _, e := range srcEntries {
+		src := filepath.Join(cloneDir, e.Name())
+		dst := filepath.Join(p.InstallPath, e.Name())
+		cp := exec.Command("cp", "-a", src, dst)
+		if err := cp.Run(); err != nil {
+			return fmt.Errorf("copying %s: %w", e.Name(), err)
+		}
+	}
+
+	// Refresh meta with the new sha and timestamp; preserve url/marketplace/version.
+	meta.CommitSha = sha
+	meta.InstalledAt = time.Now().UTC().Format(time.RFC3339)
+	if err := writeMeta(p.InstallPath, meta); err != nil {
+		return fmt.Errorf("writing plugin meta: %w", err)
+	}
+
+	return nil
 }
 
 // ListSkills returns skill directories within a plugin.
@@ -325,8 +457,50 @@ func validateGitURL(url string) error {
 	if strings.HasPrefix(url, "-") {
 		return fmt.Errorf("invalid git URL: %q", url)
 	}
-	if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "git@") {
-		return fmt.Errorf("only https:// and git@ URLs are supported, got: %q", url)
+	if !strings.HasPrefix(url, "https://") &&
+		!strings.HasPrefix(url, "http://") &&
+		!strings.HasPrefix(url, "git@") &&
+		!strings.HasPrefix(url, "file://") {
+		return fmt.Errorf("only https://, http://, git@ and file:// URLs are supported, got: %q", url)
 	}
 	return nil
+}
+
+// writeMeta writes .ss-meta.json into installDir.
+func writeMeta(installDir string, meta *PluginMeta) error {
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(installDir, metaFileName), data, 0644)
+}
+
+// readMeta loads .ss-meta.json from installDir. Returns (nil, nil) when the file is absent.
+func readMeta(installDir string) (*PluginMeta, error) {
+	path := filepath.Join(installDir, metaFileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m PluginMeta
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", metaFileName, err)
+	}
+	return &m, nil
+}
+
+// applyMeta backfills RemoteURL and GitCommitSha from .ss-meta.json when present.
+func applyMeta(p *Plugin) {
+	meta, err := readMeta(p.InstallPath)
+	if err != nil || meta == nil {
+		return
+	}
+	p.RemoteURL = meta.URL
+	if p.GitCommitSha == "" {
+		p.GitCommitSha = meta.CommitSha
+	}
 }
