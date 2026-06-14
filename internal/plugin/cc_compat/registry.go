@@ -23,8 +23,8 @@ type Entry struct {
 	GitCommitSha string `json:"gitCommitSha,omitempty"`
 }
 
-// File mirrors the on-disk structure.
-type File struct {
+// file mirrors the on-disk structure.
+type file struct {
 	Version int                `json:"version"`
 	Plugins map[string][]Entry `json:"plugins"`
 }
@@ -48,18 +48,21 @@ func NewJSONRegistry(path string) *JSONRegistry {
 
 // List returns a snapshot of every entry. Missing file returns an empty map.
 func (r *JSONRegistry) List() (map[string][]Entry, error) {
-	f, err := r.read()
-	if err != nil {
+	var out map[string][]Entry
+	if err := r.withReadLock(func(f *file) error {
+		out = f.Plugins
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	return f.Plugins, nil
+	return out, nil
 }
 
 // Add inserts or replaces the entry list for a single plugin name.
 // The "InstalledAt" field of any pre-existing entry is preserved into the
 // first new entry, matching the previous loader.go behaviour.
 func (r *JSONRegistry) Add(name string, entry Entry) error {
-	return r.withLock(func(f *File) error {
+	return r.withLock(func(f *file) error {
 		if existing, ok := f.Plugins[name]; ok && len(existing) > 0 && existing[0].InstalledAt != "" && entry.InstalledAt == "" {
 			entry.InstalledAt = existing[0].InstalledAt
 		}
@@ -71,13 +74,38 @@ func (r *JSONRegistry) Add(name string, entry Entry) error {
 // Remove deletes the entry list for a single plugin name.
 // Removing a non-existent name is a no-op (matches map delete).
 func (r *JSONRegistry) Remove(name string) error {
-	return r.withLock(func(f *File) error {
+	return r.withLock(func(f *file) error {
 		delete(f.Plugins, name)
 		return nil
 	})
 }
 
-func (r *JSONRegistry) withLock(fn func(*File) error) error {
+// withReadLock acquires a shared lock for read-only access. Use withLock for mutations.
+func (r *JSONRegistry) withReadLock(fn func(*file) error) error {
+	if err := os.MkdirAll(filepath.Dir(r.path), 0755); err != nil {
+		return err
+	}
+
+	lockPath := r.path + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return fmt.Errorf("creating lock file: %w", err)
+	}
+	defer lockFile.Close()
+
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_SH); err != nil {
+		return fmt.Errorf("acquiring read lock: %w", err)
+	}
+	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+
+	f, err := r.read()
+	if err != nil {
+		return err
+	}
+	return fn(f)
+}
+
+func (r *JSONRegistry) withLock(fn func(*file) error) error {
 	if err := os.MkdirAll(filepath.Dir(r.path), 0755); err != nil {
 		return err
 	}
@@ -92,7 +120,7 @@ func (r *JSONRegistry) withLock(fn func(*File) error) error {
 	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
 
 	f, err := r.read()
 	if err != nil {
@@ -104,16 +132,16 @@ func (r *JSONRegistry) withLock(fn func(*File) error) error {
 	return r.write(f)
 }
 
-func (r *JSONRegistry) read() (*File, error) {
+func (r *JSONRegistry) read() (*file, error) {
 	data, err := os.ReadFile(r.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &File{Version: 2, Plugins: map[string][]Entry{}}, nil
+			return &file{Version: 2, Plugins: map[string][]Entry{}}, nil
 		}
 		return nil, fmt.Errorf("reading installed plugins: %w", err)
 	}
 
-	var f File
+	var f file
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parsing installed plugins: %w", err)
 	}
@@ -123,7 +151,7 @@ func (r *JSONRegistry) read() (*File, error) {
 	return &f, nil
 }
 
-func (r *JSONRegistry) write(f *File) error {
+func (r *JSONRegistry) write(f *file) error {
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
@@ -134,5 +162,17 @@ func (r *JSONRegistry) write(f *File) error {
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, r.path)
+
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmp)
+		}
+	}()
+
+	if err := os.Rename(tmp, r.path); err != nil {
+		return err
+	}
+	renamed = true
+	return nil
 }
