@@ -152,6 +152,40 @@ func (s *Store) RemovePlugin(groupName, pluginName string) error {
 	return s.save(g)
 }
 
+// AddPrompt adds a prompt id to a group (deduplicates).
+func (s *Store) AddPrompt(groupName, promptID string) error {
+	g, err := s.Get(groupName)
+	if err != nil {
+		return err
+	}
+
+	for _, id := range g.Prompts {
+		if id == promptID {
+			return nil // already in group
+		}
+	}
+
+	g.Prompts = append(g.Prompts, promptID)
+	return s.save(g)
+}
+
+// RemovePrompt removes a prompt id from a group.
+func (s *Store) RemovePrompt(groupName, promptID string) error {
+	g, err := s.Get(groupName)
+	if err != nil {
+		return err
+	}
+
+	filtered := g.Prompts[:0]
+	for _, id := range g.Prompts {
+		if id != promptID {
+			filtered = append(filtered, id)
+		}
+	}
+	g.Prompts = filtered
+	return s.save(g)
+}
+
 func (s *Store) save(g *Group) error {
 	data, err := yaml.Marshal(g)
 	if err != nil {

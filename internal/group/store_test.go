@@ -116,3 +116,63 @@ func TestStore_OldYAMLWithoutPromptsField(t *testing.T) {
 		t.Errorf("Prompts should be empty, got %v", g.Prompts)
 	}
 }
+
+func TestStore_AddPrompt(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	if err := s.Create("g1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.AddPrompt("g1", "wuxia"); err != nil {
+		t.Fatalf("AddPrompt: %v", err)
+	}
+	g, _ := s.Get("g1")
+	if len(g.Prompts) != 1 || g.Prompts[0] != "wuxia" {
+		t.Fatalf("Prompts = %v, want [wuxia]", g.Prompts)
+	}
+
+	// Idempotent — adding twice keeps a single entry.
+	if err := s.AddPrompt("g1", "wuxia"); err != nil {
+		t.Fatal(err)
+	}
+	g, _ = s.Get("g1")
+	if len(g.Prompts) != 1 {
+		t.Fatalf("idempotent AddPrompt produced %v", g.Prompts)
+	}
+}
+
+func TestStore_RemovePrompt(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	if err := s.Create("g1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPrompt("g1", "wuxia"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPrompt("g1", "tech"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RemovePrompt("g1", "wuxia"); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := s.Get("g1")
+	if len(g.Prompts) != 1 || g.Prompts[0] != "tech" {
+		t.Fatalf("Prompts after removal = %v, want [tech]", g.Prompts)
+	}
+
+	// Removing a missing prompt is a no-op.
+	if err := s.RemovePrompt("g1", "nope"); err != nil {
+		t.Fatalf("RemovePrompt no-op should not error, got %v", err)
+	}
+}
+
+func TestStore_AddPrompt_GroupNotFound(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	if err := s.AddPrompt("missing", "x"); err == nil {
+		t.Fatal("expected error on missing group")
+	}
+}
