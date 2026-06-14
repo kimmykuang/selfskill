@@ -57,7 +57,7 @@ func NewRootCmd(version string, staticFS fs.FS) *cobra.Command {
 	cmd.AddCommand(newStatusCmd(lnk))
 	cmd.AddCommand(newPluginCmd(pluginStore, registry, pluginLoader))
 	cmd.AddCommand(newCompareCmd(cmpr))
-	cmd.AddCommand(newWebCmd(skillStore, promptStore, pluginStore, pluginLoader, lnk, staticFS))
+	cmd.AddCommand(newWebCmd(skillStore, promptStore, pluginStore, groupStore, pluginLoader, lnk, inst, registry, cmpr, svc, staticFS))
 
 	return cmd
 }

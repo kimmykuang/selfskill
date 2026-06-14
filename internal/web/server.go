@@ -5,9 +5,13 @@ import (
 	"io/fs"
 	"net/http"
 
+	"github.com/kimmykuang/selfskill/internal/compare"
+	"github.com/kimmykuang/selfskill/internal/group"
+	"github.com/kimmykuang/selfskill/internal/installer"
 	"github.com/kimmykuang/selfskill/internal/linker"
 	"github.com/kimmykuang/selfskill/internal/plugin"
 	"github.com/kimmykuang/selfskill/internal/prompt"
+	"github.com/kimmykuang/selfskill/internal/service"
 	"github.com/kimmykuang/selfskill/internal/skill"
 )
 
@@ -16,8 +20,13 @@ type Server struct {
 	SkillStore   *skill.Store
 	PromptStore  *prompt.Store
 	PluginStore  *plugin.Store
+	GroupStore   *group.Store
 	PluginLoader *plugin.Loader
 	Linker       *linker.Linker
+	Installer    *installer.Installer
+	Registry     *plugin.Registry
+	Comparer     *compare.Comparer
+	Svc          *service.Service
 	StaticFS     fs.FS
 	Port         int
 }
