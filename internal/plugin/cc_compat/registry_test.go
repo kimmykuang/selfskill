@@ -95,6 +95,25 @@ func TestJSONRegistry_RemoveMissingIsNoOp(t *testing.T) {
 	}
 }
 
+func TestFakeRegistry(t *testing.T) {
+	f := NewFakeRegistry()
+
+	if err := f.Add("a@mp", Entry{Scope: "user", InstallPath: "/x", Version: "1"}); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := f.List()
+	if _, ok := all["a@mp"]; !ok {
+		t.Fatal("Add did not record entry")
+	}
+	if err := f.Remove("a@mp"); err != nil {
+		t.Fatal(err)
+	}
+	all, _ = f.List()
+	if _, ok := all["a@mp"]; ok {
+		t.Fatal("Remove did not delete entry")
+	}
+}
+
 func TestJSONRegistry_PreservesUnrelatedPlugins(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "installed_plugins.json")
