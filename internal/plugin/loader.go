@@ -44,16 +44,29 @@ func (l *Loader) Load(name string) error {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	installedAt := now
+	if all, err := l.registry.List(); err == nil {
+		if existing, ok := all[p.FullName()]; ok && len(existing) > 0 && existing[0].InstalledAt != "" {
+			installedAt = existing[0].InstalledAt
+		}
+	}
 	entry := cc_compat.Entry{
 		Scope:        "user",
 		InstallPath:  ccCachePath,
 		Version:      p.Version,
-		InstalledAt:  now,
+		InstalledAt:  installedAt,
 		LastUpdated:  now,
 		GitCommitSha: p.GitCommitSha,
 	}
 	if err := l.registry.Add(p.FullName(), entry); err != nil {
-		os.Remove(ccCachePath)
+		rmErr := os.Remove(ccCachePath)
+		pluginDir := filepath.Dir(ccCachePath)
+		removeIfEmpty(pluginDir)
+		mpDir := filepath.Dir(pluginDir)
+		removeIfEmpty(mpDir)
+		if rmErr != nil && !os.IsNotExist(rmErr) {
+			return fmt.Errorf("registry.Add failed: %w (also: symlink cleanup failed: %v)", err, rmErr)
+		}
 		return err
 	}
 	return nil
