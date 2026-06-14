@@ -29,7 +29,7 @@ func testService(t *testing.T) (*Service, string) {
 		Prompts:      prompt.NewStore(filepath.Join(root, "prompts")),
 		Groups:       group.NewStore(filepath.Join(root, "groups")),
 		Plugins:      pluginStore,
-		Linker:       linker.New(filepath.Join(root, "claude/skills")),
+		Linker:       linker.NewWithDirs(filepath.Join(root, "skills"), filepath.Join(root, "claude/skills"), filepath.Join(root, "claude/project-skills")),
 		PluginLoader: plugin.NewLoaderWithRegistry(pluginStore, reg),
 		Registry:     reg,
 	}

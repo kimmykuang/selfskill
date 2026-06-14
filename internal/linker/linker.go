@@ -11,11 +11,24 @@ import (
 
 // Linker manages symlinks between ~/ss/skills/ and CC skills directories.
 type Linker struct {
-	skillsSourceDir string // ~/ss/skills/
+	skillsSourceDir  string // ~/ss/skills/
+	userTargetDir    string // override for tests; empty → config.UserSkillsDir()
+	projectTargetDir string // override for tests; empty → config.ProjectSkillsDir()
 }
 
 func New(skillsSourceDir string) *Linker {
 	return &Linker{skillsSourceDir: skillsSourceDir}
+}
+
+// NewWithDirs constructs a Linker with explicit target directories.
+// Intended for tests that need to redirect link targets away from the real
+// ~/.claude/skills directory.
+func NewWithDirs(skillsSourceDir, userTargetDir, projectTargetDir string) *Linker {
+	return &Linker{
+		skillsSourceDir:  skillsSourceDir,
+		userTargetDir:    userTargetDir,
+		projectTargetDir: projectTargetDir,
+	}
 }
 
 // Load creates symlinks for the given skills in the target scope directory.
@@ -107,8 +120,14 @@ func (l *Linker) FullStatus() (*FullStatus, error) {
 func (l *Linker) TargetDir(scope Scope) (string, error) {
 	switch scope {
 	case ScopeUser:
+		if l.userTargetDir != "" {
+			return l.userTargetDir, nil
+		}
 		return config.UserSkillsDir(), nil
 	case ScopeProject:
+		if l.projectTargetDir != "" {
+			return l.projectTargetDir, nil
+		}
 		return config.ProjectSkillsDir(), nil
 	default:
 		return "", fmt.Errorf("unknown scope: %s", scope)
