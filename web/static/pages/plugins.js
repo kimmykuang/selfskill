@@ -34,7 +34,7 @@ window.appPages.renderPlugins = async function (filterOverride) {
       <td><a class="gh-link">${p.name}</a></td>
       <td class="text-gh-subtle">${p.marketplace}</td>
       <td>${p.version}</td>
-      <td><span class="pill ${p.state === "loaded" ? "pill-loaded" : ""}">${p.state}</span></td>
+      <td><span class="pill ${p.state === "loaded" ? "pill-loaded" : "pill-installed"}">${p.state}</span></td>
     `;
     tr.addEventListener("click", () => {
       tbody.querySelectorAll("tr").forEach(r => r.classList.remove("active"));

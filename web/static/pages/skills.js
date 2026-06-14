@@ -39,7 +39,7 @@ window.appPages.renderSkills = async function (filterOverride) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><a class="gh-link">${sk.Name}</a></td>
-      <td><span class="pill">${sk.Origin || "local"}</span></td>
+      <td><span class="pill ${sk.Origin === "github" ? "pill-github" : "pill-local"}">${sk.Origin || "local"}</span></td>
       <td class="text-gh-subtle">${sk.Source || ""}</td>
       <td>${sk.Version || ""}</td>
     `;

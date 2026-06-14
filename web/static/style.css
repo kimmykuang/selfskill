@@ -67,3 +67,10 @@
 .prose-md pre  { @apply bg-gh-muted p-2 rounded text-[12px] font-mono overflow-x-auto; }
 .prose-md a { @apply gh-link; }
 .prose-md hr { @apply my-3 border-gh-border; }
+
+.pill-installed { @apply border-gh-border text-gh-subtle bg-white; }
+.pill-github    { @apply border-blue-200 text-gh-link bg-blue-50; }
+.pill-local     { @apply border-gh-border text-gh-subtle bg-white; }
+
+/* Tighter chip row */
+.chip { @apply mr-1; }
