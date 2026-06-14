@@ -81,6 +81,53 @@ func newComparerWithStores(t *testing.T) (*Comparer, *plugin.Store, *skill.Store
 	return New(ps, ss), ps, ss
 }
 
+// TestCompareSkill_FromMockURL_RawFrontmatterOrder reproduces the regression
+// where a freshly-installed remote skill produced a spurious diff because the
+// installer rewrote the local frontmatter through yaml.Marshal (alphabetical
+// keys) while the remote stayed in its original "name first, description
+// second" shape. The fix normalizes both sides through frontmatter.Parse +
+// frontmatter.Marshal before diffing, so the diff is empty regardless of
+// the remote file's original key order.
+func TestCompareSkill_FromMockURL_RawFrontmatterOrder(t *testing.T) {
+	// Remote is a hand-written file with frontmatter in "name, description"
+	// order — exactly what a human would write.
+	remoteRaw := []byte("---\nname: ordered\ndescription: order test\n---\n\nbody\n")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/skills/ordered.md", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(remoteRaw)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	sourceURL := server.URL + "/skills/ordered.md"
+
+	// Local copy: same content, but with `source` injected and re-marshaled
+	// through yaml.Marshal — keys end up alphabetical (description, name, source).
+	localMeta := map[string]any{
+		"name":        "ordered",
+		"description": "order test",
+		"source":      sourceURL,
+	}
+	localBytes, err := frontmatter.Marshal(localMeta, "\nbody\n")
+	if err != nil {
+		t.Fatalf("marshal local: %v", err)
+	}
+
+	c, _, ss := newComparerWithStores(t)
+	if err := ss.SaveFromContent("ordered", localBytes); err != nil {
+		t.Fatalf("SaveFromContent: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := c.CompareSkill("ordered", &buf); err != nil {
+		t.Fatalf("CompareSkill: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected empty diff after normalization, got:\n%s", buf.String())
+	}
+}
+
 func TestCompareSkill_FromMockURL_Identical(t *testing.T) {
 	base := map[string]any{
 		"description": "a skill",

@@ -61,6 +61,11 @@ func (c *Comparer) ComparePlugin(name string, w io.Writer) error {
 
 // CompareSkill downloads the skill's recorded source and diffs it against the
 // local SKILL.md. Currently supports single-file http(s) .md sources.
+//
+// To avoid spurious diffs from frontmatter field re-ordering on install,
+// both local and remote copies are run through the same normalization
+// (parse frontmatter, drop the local-only `source` key, marshal back) before
+// diffing.
 func (c *Comparer) CompareSkill(name string, w io.Writer) error {
 	sk, err := c.skillStore.Get(name)
 	if err != nil {
@@ -74,7 +79,7 @@ func (c *Comparer) CompareSkill(name string, w io.Writer) error {
 		return fmt.Errorf("skill compare from git URL not yet supported")
 	}
 
-	body, err := httpGet(sk.Source)
+	remoteRaw, err := httpGet(sk.Source)
 	if err != nil {
 		return err
 	}
@@ -85,34 +90,46 @@ func (c *Comparer) CompareSkill(name string, w io.Writer) error {
 	}
 	defer os.RemoveAll(tmp)
 
-	remotePath := filepath.Join(tmp, "SKILL.md")
-	if err := os.WriteFile(remotePath, body, 0644); err != nil {
-		return fmt.Errorf("writing remote skill: %w", err)
-	}
-
-	// Strip the local source field before diffing so it does not pollute output.
 	localPath := filepath.Join(sk.DirPath, "SKILL.md")
-	localData, err := os.ReadFile(localPath)
+	localRaw, err := os.ReadFile(localPath)
 	if err != nil {
 		return fmt.Errorf("reading local skill: %w", err)
 	}
-	meta, bodyText, err := frontmatter.Parse(localData)
+
+	localNorm, err := normalizeSkillForDiff(localRaw)
 	if err != nil {
-		return fmt.Errorf("parsing local skill frontmatter: %w", err)
+		return fmt.Errorf("normalizing local skill: %w", err)
 	}
-	if meta != nil {
-		delete(meta, "source")
-	}
-	stripped, err := frontmatter.Marshal(meta, bodyText)
+	remoteNorm, err := normalizeSkillForDiff(remoteRaw)
 	if err != nil {
-		return fmt.Errorf("marshaling local skill: %w", err)
-	}
-	localStrippedPath := filepath.Join(tmp, "local-SKILL.md")
-	if err := os.WriteFile(localStrippedPath, stripped, 0644); err != nil {
-		return fmt.Errorf("writing local skill copy: %w", err)
+		return fmt.Errorf("normalizing remote skill: %w", err)
 	}
 
-	return runDiff(localStrippedPath, remotePath, w)
+	localFile := filepath.Join(tmp, "local-SKILL.md")
+	if err := os.WriteFile(localFile, localNorm, 0644); err != nil {
+		return fmt.Errorf("writing local skill copy: %w", err)
+	}
+	remoteFile := filepath.Join(tmp, "SKILL.md")
+	if err := os.WriteFile(remoteFile, remoteNorm, 0644); err != nil {
+		return fmt.Errorf("writing remote skill: %w", err)
+	}
+
+	return runDiff(localFile, remoteFile, w)
+}
+
+// normalizeSkillForDiff parses a SKILL.md byte slice, drops the local-only
+// `source` frontmatter key, and re-marshals so the two sides of a diff share
+// the same map-encoding ordering. Files with no frontmatter are returned as-is.
+func normalizeSkillForDiff(raw []byte) ([]byte, error) {
+	meta, body, err := frontmatter.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if meta == nil {
+		return raw, nil
+	}
+	delete(meta, "source")
+	return frontmatter.Marshal(meta, body)
 }
 
 // Compare resolves name as a plugin first, then as a skill.
