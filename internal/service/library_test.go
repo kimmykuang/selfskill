@@ -97,3 +97,69 @@ func TestListSkills_FilterByKeyword(t *testing.T) {
 		t.Fatalf("keyword filter returned %+v", got)
 	}
 }
+
+func writePrompt(t *testing.T, root, id, frontmatter string) {
+	t.Helper()
+	body := "---\n" + frontmatter + "---\n\nbody for " + id + "\n"
+	path := filepath.Join(root, "prompts", id+".md")
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListPrompts_FilterByTag(t *testing.T) {
+	svc, root := testService(t)
+	writePrompt(t, root, "wuxia", "id: wuxia\ndescription: martial arts\ntags: [视频, 武侠]\n")
+	writePrompt(t, root, "tech", "id: tech\ndescription: technology\ntags: [视频, 技术]\n")
+	writePrompt(t, root, "other", "id: other\ndescription: misc\n")
+
+	got, err := svc.ListPrompts(PromptFilter{Tags: []string{"武侠"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "wuxia" {
+		t.Fatalf("tag filter returned %+v", got)
+	}
+}
+
+func TestListPrompts_FilterByQuery(t *testing.T) {
+	svc, root := testService(t)
+	writePrompt(t, root, "alpha", "id: alpha\ndescription: about cats\n")
+	writePrompt(t, root, "beta", "id: beta\ndescription: about dogs\n")
+
+	got, err := svc.ListPrompts(PromptFilter{Query: "cats"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "alpha" {
+		t.Fatalf("query filter returned %+v", got)
+	}
+}
+
+func TestListPlugins_StateAware(t *testing.T) {
+	svc, root := testService(t)
+	// Manufacture two plugin install dirs.
+	for _, name := range []string{"alpha", "beta"} {
+		dir := filepath.Join(root, "plugins", "mp", name, "1.0.0")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte("{}"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	all, err := svc.ListPlugins(PluginFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("got %d plugins, want 2", len(all))
+	}
+	// Both should be "installed" (not loaded). State is set by the service.
+	for _, p := range all {
+		if p.State != PluginStateInstalled {
+			t.Errorf("plugin %s state = %q, want installed", p.Name, p.State)
+		}
+	}
+}
