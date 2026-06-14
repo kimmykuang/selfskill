@@ -59,6 +59,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /api/groups/{name}/load", s.handleLoadGroup)
 	mux.HandleFunc("POST /api/groups/{name}/unload", s.handleUnloadGroup)
 
+	// Phase 4 — install endpoint.
+	mux.HandleFunc("POST /api/install", s.handleInstall)
+
 	// Static files
 	mux.Handle("/", http.FileServer(http.FS(s.StaticFS)))
 
