@@ -1,154 +1,118 @@
+// app.js — Alpine root state + router + ⌘K palette.
 function app() {
-    return {
-        route: 'prompts',
-        prompts: [],
-        skills: [],
-        plugins: [],
-        status: { userLinks: [], projectLinks: [] },
-        searchQuery: '',
-        searchTags: '',
-        editPrompt: { ID: '', Description: '', Body: '', Tags: [], tagsStr: '', isNew: true },
+  return {
+    route: "skills",
+    loading: false,
+    counts: { skills: "", prompts: "", plugins: "" },
+    groups: [],
+    detail: { kind: null, data: null },
+    globalQuery: "",
+    cmdkHits: [],
+    cmdkActive: 0,
+    toast: { visible: false, kind: "info", message: "" },
 
-        init() {
-            this.handleRoute();
-            window.addEventListener('hashchange', () => this.handleRoute());
-        },
+    init() {
+      window.appInstance = this;
+      window.addEventListener("hashchange", () => this.handleRoute());
+      window.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+          e.preventDefault();
+          this.openCmdK();
+        }
+      });
+      this.refreshGroups();
+      this.refreshCounts();
+      this.handleRoute();
+    },
 
-        handleRoute() {
-            const hash = window.location.hash.slice(2) || 'prompts';
+    async refreshGroups() {
+      try { this.groups = (await window.api.listGroups()) || []; }
+      catch (e) { this.groups = []; }
+    },
+    async refreshCounts() {
+      try {
+        const [s, p, pl] = await Promise.all([
+          window.api.listSkills(), window.api.listPrompts(), window.api.listPlugins(),
+        ]);
+        this.counts.skills = "(" + (s || []).length + ")";
+        this.counts.prompts = "(" + (p || []).length + ")";
+        this.counts.plugins = "(" + (pl || []).length + ")";
+      } catch (e) { /* ignore */ }
+    },
 
-            if (hash === 'prompts') {
-                this.route = 'prompts';
-                this.fetchPrompts();
-            } else if (hash === 'prompts/new') {
-                this.route = 'prompts/new';
-                this.editPrompt = { ID: '', Description: '', Body: '', Tags: [], tagsStr: '', isNew: true };
-            } else if (hash.startsWith('prompts/')) {
-                this.route = 'prompts/edit';
-                this.loadPrompt(hash.replace('prompts/', ''));
-            } else if (hash === 'skills') {
-                this.route = 'skills';
-                this.fetchSkills();
-            } else if (hash === 'plugins') {
-                this.route = 'plugins';
-                this.fetchPlugins();
-            } else if (hash === 'status') {
-                this.route = 'status';
-                this.fetchStatus();
-            }
-        },
+    handleRoute() {
+      const hash = (window.location.hash || "#/skills").slice(2);
+      this.route = hash || "skills";
+      this.detail = { kind: null, data: null };
+      const page = window.appPages || {};
 
-        async fetchPrompts() {
-            const params = new URLSearchParams();
-            if (this.searchQuery) params.set('q', this.searchQuery);
-            if (this.searchTags) params.set('tags', this.searchTags);
-            const url = '/api/prompts' + (params.toString() ? '?' + params.toString() : '');
-            const resp = await fetch(url);
-            this.prompts = await resp.json();
-        },
+      const dispatch = (name, ...args) => {
+        const fn = page[name];
+        if (!fn) return;
+        this.loading = true;
+        Promise.resolve(fn.call(this, ...args)).finally(() => { this.loading = false; });
+      };
 
-        async loadPrompt(id) {
-            const resp = await fetch('/api/prompts/' + encodeURIComponent(id));
-            if (!resp.ok) {
-                window.location.hash = '#/prompts';
-                return;
-            }
-            const p = await resp.json();
-            this.editPrompt = {
-                ID: p.ID,
-                Description: p.Description || '',
-                Body: p.Body || '',
-                Tags: p.Tags || [],
-                tagsStr: (p.Tags || []).join(', '),
-                isNew: false,
-            };
-        },
+      if (this.route === "skills") return dispatch("renderSkills");
+      if (this.route === "prompts") return dispatch("renderPrompts");
+      if (this.route === "prompts/new") return dispatch("renderPromptForm", null);
+      if (this.route.startsWith("prompts/")) return dispatch("renderPromptForm", this.route.slice("prompts/".length));
+      if (this.route === "plugins") return dispatch("renderPlugins");
+      if (this.route === "groups") return dispatch("renderGroups");
+      if (this.route.startsWith("groups/")) return dispatch("renderGroup", this.route.slice("groups/".length));
+      if (this.route === "marketplaces") return dispatch("renderMarketplaces");
+      if (this.route === "status") return dispatch("renderStatus");
+      if (this.route === "search") return dispatch("renderSearch", this.globalQuery);
 
-        async savePrompt() {
-            const tags = this.editPrompt.tagsStr
-                .split(',')
-                .map(t => t.trim())
-                .filter(t => t.length > 0);
+      document.getElementById("page-content").innerHTML = "<div class='p-6 text-gh-subtle text-sm'>Page not found.</div>";
+    },
 
-            const body = {
-                ID: this.editPrompt.ID,
-                Description: this.editPrompt.Description,
-                Body: this.editPrompt.Body,
-                Tags: tags,
-            };
+    showToast(message, kind) {
+      this.toast = { visible: true, kind: kind || "info", message };
+      setTimeout(() => { this.toast.visible = false; }, 2500);
+    },
+    showError(e) {
+      const msg = (e && e.message) || String(e);
+      this.showToast(msg, "error");
+    },
 
-            const method = this.editPrompt.isNew ? 'POST' : 'PUT';
-            const url = this.editPrompt.isNew
-                ? '/api/prompts'
-                : '/api/prompts/' + encodeURIComponent(this.editPrompt.ID);
+    setDetail(kind, data) {
+      this.detail = { kind, data };
+      const el = document.getElementById("detail-content");
+      if (window.appComponents && window.appComponents.renderDetail) {
+        window.appComponents.renderDetail(this, el, kind, data);
+      }
+    },
 
-            const resp = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
+    runSearch() {
+      if (!this.globalQuery) return;
+      window.location.hash = "#/search";
+      const fn = (window.appPages || {}).renderSearch;
+      if (fn) fn.call(this, this.globalQuery);
+    },
 
-            if (resp.ok) {
-                window.location.hash = '#/prompts';
-            } else {
-                const err = await resp.json();
-                alert(err.error || 'Failed to save prompt');
-            }
-        },
-
-        async deletePrompt() {
-            if (!confirm('Delete prompt "' + this.editPrompt.ID + '"?')) return;
-            const resp = await fetch('/api/prompts/' + encodeURIComponent(this.editPrompt.ID), {
-                method: 'DELETE',
-            });
-            if (resp.ok) {
-                window.location.hash = '#/prompts';
-            }
-        },
-
-        async fetchSkills() {
-            const resp = await fetch('/api/skills');
-            this.skills = await resp.json();
-        },
-
-        async fetchPlugins() {
-            const resp = await fetch('/api/plugins');
-            const plugins = await resp.json();
-            // Fetch skills for each plugin in parallel
-            await Promise.all(plugins.map(async (p) => {
-                try {
-                    const skResp = await fetch('/api/plugins/' + encodeURIComponent(p.name) + '/skills');
-                    p.skills = skResp.ok ? await skResp.json() : [];
-                } catch {
-                    p.skills = [];
-                }
-            }));
-            this.plugins = plugins;
-        },
-
-        async loadPlugin(name) {
-            const resp = await fetch('/api/plugins/' + encodeURIComponent(name) + '/load', { method: 'POST' });
-            if (resp.ok) {
-                this.fetchPlugins();
-            } else {
-                const err = await resp.json();
-                alert(err.error || 'Failed to load plugin');
-            }
-        },
-
-        async unloadPlugin(name) {
-            const resp = await fetch('/api/plugins/' + encodeURIComponent(name) + '/unload', { method: 'POST' });
-            if (resp.ok) {
-                this.fetchPlugins();
-            } else {
-                const err = await resp.json();
-                alert(err.error || 'Failed to unload plugin');
-            }
-        },
-
-        async fetchStatus() {
-            const resp = await fetch('/api/status');
-            this.status = await resp.json();
-        },
-    };
+    openCmdK() {
+      const dlg = document.getElementById("cmdk");
+      if (!dlg) return;
+      this.cmdkHits = []; this.cmdkActive = 0;
+      const input = document.getElementById("cmdk-input");
+      if (input) input.value = "";
+      dlg.showModal();
+      setTimeout(() => input && input.focus(), 0);
+    },
+    async runCmdKQuery(q) {
+      if (!q) { this.cmdkHits = []; return; }
+      try { this.cmdkHits = (await window.api.search(q)) || []; }
+      catch (e) { this.cmdkHits = []; }
+    },
+    runCmdKChoice(h) {
+      const dlg = document.getElementById("cmdk");
+      if (dlg && dlg.open) dlg.close();
+      if (h.Kind === "skill") window.location.hash = "#/skills";
+      else if (h.Kind === "prompt") window.location.hash = "#/prompts/" + encodeURIComponent(h.Name);
+      else if (h.Kind === "plugin") window.location.hash = "#/plugins";
+      // Refresh after navigation so detail shows.
+      this.handleRoute();
+    },
+  };
 }
