@@ -45,8 +45,16 @@
 - **使用本机已安装的 Playwright + Chromium**
 - 配置：**直接用本机 Chrome**（`channel: "chrome"`），**跳过 Chromium 下载**
   - 例：`browser = await playwright.chromium.launch({channel: "chrome", headless: true})`
-- 验证至少包括：页面能渲染、主要交互不报 console 错、改动的功能点能跑通
-- 单纯 curl 检查 endpoint 返回 200 不算 UI 验证 — endpoint 可以 200 但前端 JS 报错
+
+**Web UI 验证至少包括三层，三层都过才算完成：**
+
+(a) **功能** — 点按 / 表单 / 路由 / API 调用都正常工作
+(b) **控制台 0 错** — `page.on('console')` 收到的所有 error 级日志为空
+(c) **关键元素的 computed styles 符合预期** — 用 `page.evaluate(() => getComputedStyle(el))` 取 `display` / `padding` / `font-size` / `background-color` 等关键属性，**确认不是 0 或 initial**；以及 layout sanity（用 `getBoundingClientRect` 验证 panel 的 x/width 不重叠、宽度合理）
+
+> 教训：Playwright 功能测试 + 控制台 0 错都通过，**不等于 UI 正确**。Tailwind CDN 不处理外部 CSS 里的 `@apply`，会导致整张样式表静默失效，但不会触发任何 console error。视觉破坏只能通过 computed styles 检查暴露。
+
+- 单纯 curl 检查 endpoint 返回 200 **不算** UI 验证 — endpoint 可以 200 但前端 JS 报错或样式坏掉
 
 ## 5. 主干 context 是稀缺资源
 
