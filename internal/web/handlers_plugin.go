@@ -2,6 +2,8 @@ package web
 
 import (
 	"net/http"
+
+	"github.com/kimmykuang/selfskill/internal/service"
 )
 
 type pluginJSON struct {
@@ -13,42 +15,45 @@ type pluginJSON struct {
 }
 
 func (s *Server) handleListPlugins(w http.ResponseWriter, r *http.Request) {
-	plugins, err := s.PluginStore.List()
+	q := r.URL.Query()
+	filter := service.PluginFilter{
+		Query: q.Get("q"),
+	}
+	switch q.Get("state") {
+	case "loaded":
+		filter.State = service.PluginStateLoaded
+	case "installed":
+		filter.State = service.PluginStateInstalled
+	}
+	plugins, err := s.Svc.ListPlugins(filter)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		httpFromErr(w, err)
 		return
 	}
-
-	result := make([]pluginJSON, 0, len(plugins))
+	out := make([]pluginJSON, 0, len(plugins))
 	for _, p := range plugins {
-		state := "installed"
-		if s.PluginStore.IsLoaded(p.FullName()) {
-			state = "loaded"
-		}
-		result = append(result, pluginJSON{
+		out = append(out, pluginJSON{
 			Name:        p.Name,
 			Marketplace: p.Marketplace,
 			Version:     p.Version,
 			InstallPath: p.InstallPath,
-			State:       state,
+			State:       string(p.State),
 		})
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleGetPlugin(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	p, err := s.PluginStore.Get(name)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "plugin not found"})
+		httpError(w, http.StatusNotFound, "plugin not found")
 		return
 	}
-
 	state := "installed"
-	if s.PluginStore.IsLoaded(p.FullName()) {
+	if s.Svc != nil && s.Svc.IsPluginLoaded(p.FullName()) {
 		state = "loaded"
 	}
-
 	writeJSON(w, http.StatusOK, pluginJSON{
 		Name:        p.Name,
 		Marketplace: p.Marketplace,
@@ -74,7 +79,7 @@ func (s *Server) handlePluginSkills(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePluginLoad(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.PluginLoader.Load(name); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httpError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "loaded"})
@@ -83,7 +88,7 @@ func (s *Server) handlePluginLoad(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePluginUnload(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.PluginLoader.Unload(name); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httpError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "unloaded"})

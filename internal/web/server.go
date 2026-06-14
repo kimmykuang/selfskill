@@ -68,6 +68,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /api/marketplaces/{name}/plugins", s.handleListMarketplacePlugins)
 	mux.HandleFunc("POST /api/plugins/install", s.handleInstallPlugin)
 
+	// Phase 4 — search.
+	mux.HandleFunc("GET /api/search", s.handleSearch)
+
 	// Static files
 	mux.Handle("/", http.FileServer(http.FS(s.StaticFS)))
 
