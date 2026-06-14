@@ -62,6 +62,12 @@ func (s *Server) Start() error {
 	// Phase 4 — install endpoint.
 	mux.HandleFunc("POST /api/install", s.handleInstall)
 
+	// Phase 4 — marketplace endpoints.
+	mux.HandleFunc("GET /api/marketplaces", s.handleListMarketplaces)
+	mux.HandleFunc("POST /api/marketplaces", s.handleAddMarketplace)
+	mux.HandleFunc("GET /api/marketplaces/{name}/plugins", s.handleListMarketplacePlugins)
+	mux.HandleFunc("POST /api/plugins/install", s.handleInstallPlugin)
+
 	// Static files
 	mux.Handle("/", http.FileServer(http.FS(s.StaticFS)))
 
