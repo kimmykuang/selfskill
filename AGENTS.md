@@ -88,6 +88,55 @@
 
 主干读到的只能是浓缩信息。如果你（agent）作为主干跑了重命令产生大量输出，下次先派 sub agent。
 
+## 6. 长任务必须维护 PROGRESS.md
+
+跨多轮对话、横跨多 phase / commit 的长任务，**必须**在项目根目录维护 `PROGRESS.md`，目标是：**下次重新打开 cc，只读 PROGRESS.md 就能立刻接上**。
+
+### 何时维护
+
+- 任务跨多次对话（compact 后还要继续 / 用户预计明后天再回来）
+- 任务有 ≥3 个 phase，或单 phase 内 ≥5 个 task
+- 任何形态的 implementation plan 在执行中
+
+短任务（一两轮搞定的 bugfix / docs 修改）不需要。
+
+### PROGRESS.md 内容要求
+
+至少包含：
+
+1. **任务标题 + 一句话目标**
+2. **当前会话的 task 清单**（用 `- [x]` / `- [ ]` 标完成情况，跟 TaskCreate 同步）
+3. **每个已完成步骤的 commit SHA + 一句话说明** — 这样 git log 之外有人话注释
+4. **每步使用的回归方式**（例如 `go test ./internal/x/ -race`、Playwright 验证脚本路径），以及**是否验证通过**
+5. **下一步要做什么** — 一段明确的 "Next" 段落，写下个动作的命令 / 文件 / 入口
+6. **已知阻塞 / 待回答的问题**（如果有）
+7. **更新时间戳**（每次写入时刷新一行）
+
+### 维护节奏
+
+- 每完成一个 task 或 phase 立即更新 — 不要积攒
+- 每次新对话开始先读 PROGRESS.md，再读 TaskList
+- commit 完成后在 PROGRESS.md 里附 SHA
+- 任务全部完成时把状态改为 `✅ DONE` 并保留文件作为存档（不要删）
+
+### 不要做的事
+
+- 不要把 PROGRESS.md 当成日记 — 只记**行动后果**，不记内心活动
+- 不要重复 git log 的内容 — 只写"为什么这个 commit 重要"
+- 不要把它放在 `docs/` 下（那是 gitignore'd），就放在仓库根目录，**纳入 git**
+
+### 与其他记录的区别
+
+| 文件 | 用途 |
+|---|---|
+| `AGENTS.md`（本文件） | 不变的工作纪律 |
+| `PROGRESS.md` | 当前/最近一个长任务的执行状态 |
+| `docs/superpowers/specs/` | 设计 spec（不入 git） |
+| `docs/superpowers/plans/` | 实施 plan（不入 git） |
+| TodoWrite tasks | 当前会话内的细粒度 todo（会话结束消失） |
+
+PROGRESS.md 是把**会话内 todo** 升级成**跨会话契约**的桥梁。
+
 ---
 
 ## 项目结构速记
